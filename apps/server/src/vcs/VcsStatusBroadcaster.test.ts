@@ -268,6 +268,80 @@ describe("VcsStatusBroadcaster", () => {
     }).pipe(Effect.provide(makeTestLayer(state)));
   });
 
+  it.effect("skips remote refresh during full status refresh when requested", () => {
+    const state = {
+      currentLocalStatus: baseLocalStatus,
+      currentRemoteStatus: baseRemoteStatus,
+      localStatusCalls: 0,
+      remoteStatusCalls: 0,
+      localInvalidationCalls: 0,
+      remoteInvalidationCalls: 0,
+    };
+
+    return Effect.gen(function* () {
+      const broadcaster = yield* VcsStatusBroadcaster.VcsStatusBroadcaster;
+      const initial = yield* broadcaster.getStatus({ cwd: "/repo" });
+
+      state.currentLocalStatus = {
+        ...baseLocalStatus,
+        refName: "feature/local-status-only",
+      };
+      state.currentRemoteStatus = {
+        ...baseRemoteStatus,
+        behindCount: 3,
+      };
+
+      const refreshed = yield* broadcaster.refreshStatus("/repo", {
+        refreshRemote: Effect.succeed(false),
+      });
+
+      assert.deepStrictEqual(initial, baseStatus);
+      assert.deepStrictEqual(refreshed, {
+        ...state.currentLocalStatus,
+        ...baseRemoteStatus,
+      });
+      assert.equal(state.localStatusCalls, 2);
+      assert.equal(state.remoteStatusCalls, 1);
+      assert.equal(state.localInvalidationCalls, 1);
+      assert.equal(state.remoteInvalidationCalls, 0);
+    }).pipe(Effect.provide(makeTestLayer(state)));
+  });
+
+  it.effect(
+    "does not load remote status on a local-only refresh without a cached remote snapshot",
+    () => {
+      const state = {
+        currentLocalStatus: baseLocalStatus,
+        currentRemoteStatus: baseRemoteStatus,
+        localStatusCalls: 0,
+        remoteStatusCalls: 0,
+        localInvalidationCalls: 0,
+        remoteInvalidationCalls: 0,
+      };
+
+      return Effect.gen(function* () {
+        const broadcaster = yield* VcsStatusBroadcaster.VcsStatusBroadcaster;
+
+        const refreshed = yield* broadcaster.refreshStatus("/repo", {
+          refreshRemote: Effect.succeed(false),
+        });
+
+        assert.deepStrictEqual(refreshed, {
+          ...baseLocalStatus,
+          hasUpstream: false,
+          aheadCount: 0,
+          behindCount: 0,
+          aheadOfDefaultCount: 0,
+          pr: null,
+        });
+        assert.equal(state.localStatusCalls, 1);
+        assert.equal(state.remoteStatusCalls, 0);
+        assert.equal(state.localInvalidationCalls, 1);
+        assert.equal(state.remoteInvalidationCalls, 0);
+      }).pipe(Effect.provide(makeTestLayer(state)));
+    },
+  );
+
   it.effect("normalizes symlinked CWDs before cache lookup and workflow calls", () => {
     const seenCwds: string[] = [];
     const state = {

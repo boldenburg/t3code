@@ -137,6 +137,10 @@ interface StreamStatusOptions {
   readonly automaticRemoteRefreshInterval?: Effect.Effect<Duration.Duration, never>;
 }
 
+interface RefreshStatusOptions {
+  readonly refreshRemote?: Effect.Effect<boolean, never>;
+}
+
 export function remoteRefreshFailureDelay(
   consecutiveFailures: number,
   configuredInterval: Duration.Duration,
@@ -151,21 +155,26 @@ export function remoteRefreshFailureDelay(
   return Duration.max(configuredInterval, cappedBackoff);
 }
 
+export interface VcsStatusBroadcasterShape {
+  readonly getStatus: (
+    input: VcsStatusInput,
+  ) => Effect.Effect<VcsStatusResult, GitManagerServiceError>;
+  readonly refreshLocalStatus: (
+    cwd: string,
+  ) => Effect.Effect<VcsStatusLocalResult, GitManagerServiceError>;
+  readonly refreshStatus: (
+    cwd: string,
+    options?: RefreshStatusOptions,
+  ) => Effect.Effect<VcsStatusResult, GitManagerServiceError>;
+  readonly streamStatus: (
+    input: VcsStatusInput,
+    options?: StreamStatusOptions,
+  ) => Stream.Stream<VcsStatusStreamEvent, GitManagerServiceError>;
+}
+
 export class VcsStatusBroadcaster extends Context.Service<
   VcsStatusBroadcaster,
-  {
-    readonly getStatus: (
-      input: VcsStatusInput,
-    ) => Effect.Effect<VcsStatusResult, GitManagerServiceError>;
-    readonly refreshLocalStatus: (
-      cwd: string,
-    ) => Effect.Effect<VcsStatusLocalResult, GitManagerServiceError>;
-    readonly refreshStatus: (cwd: string) => Effect.Effect<VcsStatusResult, GitManagerServiceError>;
-    readonly streamStatus: (
-      input: VcsStatusInput,
-      options?: StreamStatusOptions,
-    ) => Stream.Stream<VcsStatusStreamEvent, GitManagerServiceError>;
-  }
+  VcsStatusBroadcasterShape
 >()("t3/vcs/VcsStatusBroadcaster") {}
 
 function fingerprintStatusPart(status: unknown): string {
@@ -318,7 +327,7 @@ export const make = Effect.gen(function* () {
 
   const withFileSystem = Effect.provideService(FileSystem.FileSystem, fs);
 
-  const getStatus: VcsStatusBroadcaster["Service"]["getStatus"] = Effect.fn(
+  const getStatus: VcsStatusBroadcasterShape["getStatus"] = Effect.fn(
     "VcsStatusBroadcaster.getStatus",
   )(function* (input) {
     const cwd = yield* withFileSystem(normalizeCwd(input.cwd));
@@ -344,7 +353,7 @@ export const make = Effect.gen(function* () {
     },
   );
 
-  const refreshLocalStatus: VcsStatusBroadcaster["Service"]["refreshLocalStatus"] = Effect.fn(
+  const refreshLocalStatus: VcsStatusBroadcasterShape["refreshLocalStatus"] = Effect.fn(
     "VcsStatusBroadcaster.refreshLocalStatus",
   )(function* (rawCwd) {
     const cwd = yield* withFileSystem(normalizeCwd(rawCwd));
@@ -362,19 +371,21 @@ export const make = Effect.gen(function* () {
     return yield* updateCachedRemoteStatus(cwd, remote, { publish: true });
   });
 
-  const refreshStatus: VcsStatusBroadcaster["Service"]["refreshStatus"] = Effect.fn(
+  const refreshStatus: VcsStatusBroadcasterShape["refreshStatus"] = Effect.fn(
     "VcsStatusBroadcaster.refreshStatus",
-  )(function* (rawCwd) {
+  )(function* (rawCwd, options) {
     const cwd = yield* withFileSystem(normalizeCwd(rawCwd));
-    yield* Effect.all([workflow.invalidateLocalStatus(cwd), workflow.invalidateRemoteStatus(cwd)], {
-      concurrency: "unbounded",
-      discard: true,
-    });
+    const shouldRefreshRemote = options?.refreshRemote ? yield* options.refreshRemote : true;
     const [local, remote] = yield* Effect.all(
-      [workflow.localStatus({ cwd }), workflow.remoteStatus({ cwd })],
+      [
+        refreshLocalStatusCore(cwd),
+        shouldRefreshRemote
+          ? refreshRemoteStatus(cwd)
+          : getCachedStatus(cwd).pipe(Effect.map((cached) => cached?.remote?.value ?? null)),
+      ],
       { concurrency: "unbounded" },
     );
-    return yield* updateCachedStatus(cwd, local, remote, { publish: true });
+    return mergeGitStatusParts(local, remote);
   });
 
   const makeRemoteRefreshLoop = (
@@ -394,7 +405,6 @@ export const make = Effect.gen(function* () {
         if (Duration.isZero(configuredInterval) && !needsInitialRefresh) {
           return activeInterval;
         }
-
         const exit = yield* refreshRemoteStatus(cwd, {
           refreshUpstream: !Duration.isZero(configuredInterval),
         }).pipe(Effect.exit);
@@ -501,7 +511,7 @@ export const make = Effect.gen(function* () {
     }
   });
 
-  const streamStatus: VcsStatusBroadcaster["Service"]["streamStatus"] = (input, options) =>
+  const streamStatus: VcsStatusBroadcasterShape["streamStatus"] = (input, options) =>
     Stream.unwrap(
       Effect.gen(function* () {
         const cwd = yield* withFileSystem(normalizeCwd(input.cwd));
