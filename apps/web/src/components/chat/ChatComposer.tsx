@@ -86,7 +86,7 @@ import {
   renderProviderTraitsPicker,
 } from "./composerProviderState";
 import { normalizeChatComposerFooterSettings } from "./composerFooterSettings";
-import { ContextWindowMeter } from "./ContextWindowMeter";
+import { ContextWindowMeter, ContextWindowPercentages } from "./ContextWindowMeter";
 import { buildExpandedImagePreview, type ExpandedImagePreview } from "./ExpandedImagePreview";
 import { basenameOfPath } from "../../pierre-icons";
 import { cn, randomUUID } from "~/lib/utils";
@@ -121,6 +121,7 @@ import type { SessionPhase, Thread } from "../../types";
 import type { PendingUserInputDraftAnswer } from "../../pendingUserInput";
 import type { PendingApproval, PendingUserInput } from "../../session-logic";
 import {
+  deriveContextRemainingPercentages,
   deriveLatestContextWindowSnapshot,
   formatProviderDisplayName,
 } from "../../lib/contextWindow";
@@ -330,9 +331,6 @@ function ComposerFooterItemSeparator() {
 
 const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(props: {
   compact: boolean;
-  activeContextWindow: ReturnType<typeof deriveLatestContextWindowSnapshot>;
-  activeThreadProviderDisplayName: string | null;
-  showContextWindow?: boolean;
   isPreparingWorktree: boolean;
   pendingAction: {
     questionIndex: number;
@@ -355,12 +353,6 @@ const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(
 }) {
   return (
     <>
-      {props.showContextWindow !== false && props.activeContextWindow ? (
-        <ContextWindowMeter
-          usage={props.activeContextWindow}
-          providerDisplayName={props.activeThreadProviderDisplayName}
-        />
-      ) : null}
       {props.isPreparingWorktree ? (
         <span className="text-muted-foreground/70 text-xs">Preparing worktree...</span>
       ) : null}
@@ -852,6 +844,10 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   // ------------------------------------------------------------------
   const activeContextWindow = useMemo(
     () => deriveLatestContextWindowSnapshot(activeThreadActivities ?? []),
+    [activeThreadActivities],
+  );
+  const activeContextRemainingPercentages = useMemo(
+    () => deriveContextRemainingPercentages(activeThreadActivities ?? []),
     [activeThreadActivities],
   );
   const activeThreadProviderDisplayName = useMemo(() => {
@@ -2050,7 +2046,11 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     if (itemId === "traits") return providerTraitsPicker !== null;
     if (itemId === "interactionMode") return composerProviderControls.showInteractionModeToggle;
     if (itemId === "planSidebar") return showPlanSidebarToggle;
-    return itemId !== "contextWindow";
+    return itemId !== "contextWindow" && itemId !== "contextPercentages";
+  });
+  const composerFooterRightItemIds = composerFooterSettings.rightItemIds.filter((itemId) => {
+    if (itemId === "contextWindow") return activeContextWindow !== null;
+    return true;
   });
   const renderComposerModelPicker = () => (
     <ProviderModelPicker
@@ -2105,6 +2105,26 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           />
         );
       case "contextWindow":
+      case "contextPercentages":
+        return null;
+    }
+  };
+  const renderComposerFooterRightItem = (itemId: ChatComposerFooterItemId) => {
+    switch (itemId) {
+      case "contextWindow":
+        return activeContextWindow ? (
+          <ContextWindowMeter
+            usage={activeContextWindow}
+            providerDisplayName={activeThreadProviderDisplayName}
+          />
+        ) : null;
+      case "contextPercentages":
+        return <ContextWindowPercentages percentages={activeContextRemainingPercentages} />;
+      case "model":
+      case "traits":
+      case "runtimeMode":
+      case "interactionMode":
+      case "planSidebar":
         return null;
     }
   };
@@ -2582,11 +2602,11 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                 }
                 className="flex shrink-0 flex-nowrap items-center justify-end gap-2"
               >
+                {composerFooterRightItemIds.map((itemId) => (
+                  <Fragment key={itemId}>{renderComposerFooterRightItem(itemId)}</Fragment>
+                ))}
                 <ComposerFooterPrimaryActions
                   compact={isComposerPrimaryActionsCompact}
-                  activeContextWindow={activeContextWindow}
-                  activeThreadProviderDisplayName={activeThreadProviderDisplayName}
-                  showContextWindow={isComposerFooterItemVisible("contextWindow")}
                   pendingAction={pendingPrimaryAction}
                   isRunning={phase === "running"}
                   showPlanFollowUpPrompt={pendingUserInputs.length === 0 && showPlanFollowUpPrompt}

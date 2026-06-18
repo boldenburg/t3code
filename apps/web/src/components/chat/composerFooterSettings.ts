@@ -45,6 +45,12 @@ export const COMPOSER_FOOTER_ITEM_METADATA = [
     description: "Current thread context window usage, shown when usage data is available.",
     side: "right",
   },
+  {
+    id: "contextPercentages",
+    label: "Context percentages",
+    description: "Weekly, 5h, and current context window remaining percentages.",
+    side: "right",
+  },
 ] as const satisfies ReadonlyArray<{
   readonly id: ChatComposerFooterItemId;
   readonly label: string;
@@ -57,6 +63,7 @@ export const COMPOSER_FOOTER_ITEM_BY_ID = new Map(
 );
 
 const KNOWN_ITEM_IDS = new Set(COMPOSER_FOOTER_ITEM_METADATA.map((item) => item.id));
+const DEFAULT_HIDDEN_ITEM_IDS = new Set<ChatComposerFooterItemId>(["contextPercentages"]);
 
 function normalizeItemIds(ids: ReadonlyArray<unknown>): ChatComposerFooterItemId[] {
   const seen = new Set<ChatComposerFooterItemId>();
@@ -90,6 +97,11 @@ export function normalizeChatComposerFooterSettings(
   const hiddenItemIds = normalizeItemIds(
     settings?.hiddenItemIds ?? DEFAULT_CHAT_COMPOSER_FOOTER_SETTINGS.hiddenItemIds,
   );
+  if (!settings?.itemOrder?.includes("contextPercentages")) {
+    hiddenItemIds.push(
+      ...[...DEFAULT_HIDDEN_ITEM_IDS].filter((itemId) => !hiddenItemIds.includes(itemId)),
+    );
+  }
   const hiddenItemIdSet = new Set(hiddenItemIds);
   const visibleItemIds = itemOrder.filter((itemId) => !hiddenItemIdSet.has(itemId));
   const leftItemIds = visibleItemIds.filter(

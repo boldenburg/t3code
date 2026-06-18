@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vite-plus/test";
 import { EventId, type OrchestrationThreadActivity, TurnId } from "@t3tools/contracts";
 
-import { deriveLatestContextWindowSnapshot, formatContextWindowTokens } from "./contextWindow";
+import {
+  deriveContextRemainingPercentages,
+  deriveLatestContextWindowSnapshot,
+  formatContextWindowTokens,
+} from "./contextWindow";
 
 function makeActivity(id: string, kind: string, payload: unknown): OrchestrationThreadActivity {
   return {
@@ -80,5 +84,110 @@ describe("contextWindow", () => {
 
     expect(snapshot?.usedTokens).toBe(81_659);
     expect(snapshot?.totalProcessedTokens).toBe(748_126);
+  });
+
+  it("derives explicit remaining percentages from Codex rate limits and context window", () => {
+    const snapshot = deriveContextRemainingPercentages([
+      makeActivity("activity-1", "account-rate-limits.updated", {
+        rateLimits: {
+          rateLimits: {
+            primary: { usedPercent: 26, resetsAt: 1_766_000_000, windowDurationMins: 10_080 },
+            secondary: { usedPercent: 69, resetsAt: 1_765_000_000, windowDurationMins: 300 },
+          },
+        },
+      }),
+      makeActivity("activity-2", "context-window.updated", {
+        usedTokens: 18,
+        maxTokens: 100,
+      }),
+    ]);
+
+    expect(snapshot).toMatchObject({
+      weeklyRemainingPercentage: 74,
+      fiveHourRemainingPercentage: 31,
+      currentWindowRemainingPercentage: 82,
+      weeklyRateLimit: {
+        usedPercentage: 26,
+        remainingPercentage: 74,
+        resetsAt: 1_766_000_000,
+        windowDurationMins: 10_080,
+      },
+      fiveHourRateLimit: {
+        usedPercentage: 69,
+        remainingPercentage: 31,
+        resetsAt: 1_765_000_000,
+        windowDurationMins: 300,
+      },
+      currentWindow: {
+        usedTokens: 18,
+        maxTokens: 100,
+      },
+    });
+  });
+
+  it("prefers Codex limit-id snapshots over the legacy rateLimits snapshot", () => {
+    expect(
+      deriveContextRemainingPercentages([
+        makeActivity("activity-1", "account-rate-limits.updated", {
+          rateLimits: {
+            rateLimits: {
+              primary: { usedPercent: 99, windowDurationMins: 10_080 },
+              secondary: { usedPercent: 99, windowDurationMins: 300 },
+            },
+            rateLimitsByLimitId: {
+              codex: {
+                primary: { usedPercent: 20, windowDurationMins: 10_080 },
+                secondary: { usedPercent: 40, windowDurationMins: 300 },
+              },
+            },
+          },
+        }),
+      ]),
+    ).toMatchObject({
+      weeklyRemainingPercentage: 80,
+      fiveHourRemainingPercentage: 60,
+    });
+  });
+
+  it("keeps older known rate-limit values when newer updates are sparse", () => {
+    expect(
+      deriveContextRemainingPercentages([
+        makeActivity("activity-1", "account-rate-limits.updated", {
+          rateLimits: {
+            primary: { usedPercent: 45, windowDurationMins: 10_080 },
+            secondary: { usedPercent: 70, windowDurationMins: 300 },
+          },
+        }),
+        makeActivity("activity-2", "account-rate-limits.updated", {
+          rateLimits: {
+            secondary: { usedPercent: 25, windowDurationMins: 300 },
+          },
+        }),
+      ]),
+    ).toMatchObject({
+      weeklyRemainingPercentage: 55,
+      fiveHourRemainingPercentage: 75,
+    });
+  });
+
+  it("ignores malformed windows and clamps remaining percentages", () => {
+    expect(
+      deriveContextRemainingPercentages([
+        makeActivity("activity-1", "account-rate-limits.updated", {
+          rateLimits: {
+            primary: { usedPercent: 110, windowDurationMins: 10_080 },
+            secondary: { usedPercent: -5, windowDurationMins: 300 },
+          },
+        }),
+        makeActivity("activity-2", "account-rate-limits.updated", {
+          rateLimits: {
+            primary: { usedPercent: "70", windowDurationMins: 10_080 },
+          },
+        }),
+      ]),
+    ).toMatchObject({
+      weeklyRemainingPercentage: 0,
+      fiveHourRemainingPercentage: 100,
+    });
   });
 });

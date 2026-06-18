@@ -1,8 +1,13 @@
 import { cn } from "~/lib/utils";
-import { type ContextWindowSnapshot, formatContextWindowTokens } from "~/lib/contextWindow";
+import {
+  type AccountRateLimitWindowSnapshot,
+  type ContextRemainingPercentages,
+  type ContextWindowSnapshot,
+  formatContextWindowTokens,
+} from "~/lib/contextWindow";
 import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
 
-function formatPercentage(value: number | null): string | null {
+export function formatContextWindowPercentage(value: number | null): string | null {
   if (value === null || !Number.isFinite(value)) {
     return null;
   }
@@ -12,12 +17,162 @@ function formatPercentage(value: number | null): string | null {
   return `${Math.round(value)}%`;
 }
 
+const percentageText = (value: number | null): string =>
+  formatContextWindowPercentage(value) ?? "--";
+
+const tokenText = (value: number | null): string =>
+  value === null ? "--" : formatContextWindowTokens(value);
+
+function formatWindowDuration(value: number | null): string {
+  if (value === null || !Number.isFinite(value)) {
+    return "--";
+  }
+  if (value % 1440 === 0) {
+    return `${value / 1440}d`;
+  }
+  if (value % 60 === 0) {
+    return `${value / 60}h`;
+  }
+  return `${value}m`;
+}
+
+function formatRateLimitTime(value: number | string | null): string {
+  if (value === null) {
+    return "--";
+  }
+  const raw = typeof value === "number" ? value : Date.parse(value);
+  if (!Number.isFinite(raw)) {
+    return "--";
+  }
+  const millis = typeof value === "number" && value < 1_000_000_000_000 ? value * 1000 : raw;
+  const date = new Date(millis);
+  if (Number.isNaN(date.getTime())) {
+    return "--";
+  }
+  return date.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function PercentageDetailRow(props: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3 text-[11px] leading-4">
+      <span className="text-muted-foreground/60">{props.label}</span>
+      <span className="font-medium tabular-nums text-muted-foreground/80">{props.value}</span>
+    </div>
+  );
+}
+
+function RateLimitWindowDetails(props: {
+  title: string;
+  window: AccountRateLimitWindowSnapshot | null;
+}) {
+  const { title, window } = props;
+  return (
+    <div className="grid gap-1.5">
+      <div className="font-medium text-muted-foreground text-xs">{title}</div>
+      <PercentageDetailRow
+        label="Remaining"
+        value={percentageText(window?.remainingPercentage ?? null)}
+      />
+      <PercentageDetailRow label="Used" value={percentageText(window?.usedPercentage ?? null)} />
+      <PercentageDetailRow label="Resets" value={formatRateLimitTime(window?.resetsAt ?? null)} />
+      <PercentageDetailRow label="Updated" value={formatRateLimitTime(window?.updatedAt ?? null)} />
+      <PercentageDetailRow
+        label="Window"
+        value={formatWindowDuration(window?.windowDurationMins ?? null)}
+      />
+    </div>
+  );
+}
+
+export function ContextWindowPercentages(props: { percentages: ContextRemainingPercentages }) {
+  const { percentages } = props;
+  return (
+    <Popover>
+      <PopoverTrigger
+        render={
+          <button
+            type="button"
+            className={cn(
+              "inline-flex min-w-[9.75rem] shrink-0 justify-end gap-1.5 whitespace-nowrap rounded-md px-1 py-1 text-[11px] font-medium tabular-nums text-muted-foreground/75 outline-none transition-colors",
+              "hover:bg-accent data-[pressed]:bg-accent",
+              "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+            )}
+            aria-label={`Context remaining percentages: weekly ${percentageText(
+              percentages.weeklyRemainingPercentage,
+            )}, five-hour ${percentageText(
+              percentages.fiveHourRemainingPercentage,
+            )}, current context ${percentageText(percentages.currentWindowRemainingPercentage)}`}
+          >
+            <span>W {percentageText(percentages.weeklyRemainingPercentage)}</span>
+            <span className="text-muted-foreground/40">·</span>
+            <span>5h {percentageText(percentages.fiveHourRemainingPercentage)}</span>
+            <span className="text-muted-foreground/40">·</span>
+            <span>Ctx {percentageText(percentages.currentWindowRemainingPercentage)}</span>
+          </button>
+        }
+      />
+      <PopoverPopup tooltipStyle side="top" align="end" className="w-72 max-w-none p-0">
+        <div className="grid gap-3 p-3">
+          <RateLimitWindowDetails title="Weekly Limit" window={percentages.weeklyRateLimit} />
+          <RateLimitWindowDetails title="5h Limit" window={percentages.fiveHourRateLimit} />
+          <div className="grid gap-1.5">
+            <div className="font-medium text-muted-foreground text-xs">Current Context Window</div>
+            <PercentageDetailRow
+              label="Remaining"
+              value={percentageText(percentages.currentWindow?.remainingPercentage ?? null)}
+            />
+            <PercentageDetailRow
+              label="Used"
+              value={percentageText(percentages.currentWindow?.usedPercentage ?? null)}
+            />
+            <PercentageDetailRow
+              label="Used tokens"
+              value={tokenText(percentages.currentWindow?.usedTokens ?? null)}
+            />
+            <PercentageDetailRow
+              label="Max tokens"
+              value={tokenText(percentages.currentWindow?.maxTokens ?? null)}
+            />
+            <PercentageDetailRow
+              label="Remaining tokens"
+              value={tokenText(percentages.currentWindow?.remainingTokens ?? null)}
+            />
+            <PercentageDetailRow
+              label="Total processed"
+              value={tokenText(percentages.currentWindow?.totalProcessedTokens ?? null)}
+            />
+            <PercentageDetailRow
+              label="Updated"
+              value={formatRateLimitTime(percentages.currentWindow?.updatedAt ?? null)}
+            />
+            <PercentageDetailRow
+              label="Auto compacts"
+              value={
+                percentages.currentWindow === null
+                  ? "--"
+                  : percentages.currentWindow.compactsAutomatically
+                    ? "Yes"
+                    : "No"
+              }
+            />
+          </div>
+        </div>
+      </PopoverPopup>
+    </Popover>
+  );
+}
+
 export function ContextWindowMeter(props: {
   usage: ContextWindowSnapshot;
   providerDisplayName?: string | null;
 }) {
   const { usage, providerDisplayName } = props;
-  const usedPercentage = formatPercentage(usage.usedPercentage);
+  const usedPercentage = formatContextWindowPercentage(usage.usedPercentage);
   const normalizedPercentage = Math.max(0, Math.min(100, usage.usedPercentage ?? 0));
   const radius = 9.75;
   const circumference = 2 * Math.PI * radius;

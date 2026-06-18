@@ -46,6 +46,7 @@ export const ChatComposerFooterItemId = Schema.Literals([
   "interactionMode",
   "planSidebar",
   "contextWindow",
+  "contextPercentages",
 ]);
 export type ChatComposerFooterItemId = typeof ChatComposerFooterItemId.Type;
 export const DEFAULT_CHAT_COMPOSER_FOOTER_ITEM_ORDER: ChatComposerFooterItemId[] = [
@@ -55,19 +56,25 @@ export const DEFAULT_CHAT_COMPOSER_FOOTER_ITEM_ORDER: ChatComposerFooterItemId[]
   "interactionMode",
   "planSidebar",
   "contextWindow",
+  "contextPercentages",
+];
+export const DEFAULT_CHAT_COMPOSER_FOOTER_HIDDEN_ITEM_IDS: ChatComposerFooterItemId[] = [
+  "contextPercentages",
 ];
 export const ChatComposerFooterSettingsSchema = Schema.Struct({
   itemOrder: Schema.Array(ChatComposerFooterItemId).pipe(
     Schema.withDecodingDefault(Effect.sync(() => [...DEFAULT_CHAT_COMPOSER_FOOTER_ITEM_ORDER])),
   ),
   hiddenItemIds: Schema.Array(ChatComposerFooterItemId).pipe(
-    Schema.withDecodingDefault(Effect.succeed([])),
+    Schema.withDecodingDefault(
+      Effect.sync(() => [...DEFAULT_CHAT_COMPOSER_FOOTER_HIDDEN_ITEM_IDS]),
+    ),
   ),
 }).pipe(
   Schema.withDecodingDefault(
     Effect.sync(() => ({
       itemOrder: [...DEFAULT_CHAT_COMPOSER_FOOTER_ITEM_ORDER],
-      hiddenItemIds: [],
+      hiddenItemIds: [...DEFAULT_CHAT_COMPOSER_FOOTER_HIDDEN_ITEM_IDS],
     })),
   ),
 );

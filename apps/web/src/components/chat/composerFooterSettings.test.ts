@@ -15,6 +15,10 @@ describe("normalizeChatComposerFooterSettings", () => {
       "interactionMode",
       "planSidebar",
       "contextWindow",
+      "contextPercentages",
+    ]);
+    expect(normalizeChatComposerFooterSettings(undefined).hiddenItemIds).toEqual([
+      "contextPercentages",
     ]);
   });
 
@@ -31,8 +35,9 @@ describe("normalizeChatComposerFooterSettings", () => {
       "runtimeMode",
       "interactionMode",
       "planSidebar",
+      "contextPercentages",
     ]);
-    expect(normalized.hiddenItemIds).toEqual(["traits"]);
+    expect(normalized.hiddenItemIds).toEqual(["traits", "contextPercentages"]);
     expect(normalized.visibleItemIds).toEqual([
       "model",
       "contextWindow",
@@ -49,6 +54,23 @@ describe("normalizeChatComposerFooterSettings", () => {
     });
 
     expect(normalized.leftItemIds).toEqual(["model", "traits", "interactionMode", "planSidebar"]);
+    expect(normalized.rightItemIds).toEqual(["contextWindow"]);
+  });
+
+  it("keeps the explicit percentages item hidden for older saved settings", () => {
+    const normalized = normalizeChatComposerFooterSettings({
+      itemOrder: [
+        "model",
+        "traits",
+        "runtimeMode",
+        "interactionMode",
+        "planSidebar",
+        "contextWindow",
+      ],
+      hiddenItemIds: [],
+    });
+
+    expect(normalized.hiddenItemIds).toContain("contextPercentages");
     expect(normalized.rightItemIds).toEqual(["contextWindow"]);
   });
 });
@@ -68,6 +90,7 @@ describe("moveChatComposerFooterItem", () => {
       "interactionMode",
       "planSidebar",
       "contextWindow",
+      "contextPercentages",
     ]);
   });
 
@@ -84,6 +107,33 @@ describe("moveChatComposerFooterItem", () => {
       "runtimeMode",
       "interactionMode",
       "planSidebar",
+      "contextWindow",
+      "contextPercentages",
+    ]);
+  });
+
+  it("moves right-side items only among right-side items", () => {
+    expect(
+      moveChatComposerFooterItem(
+        [
+          "model",
+          "traits",
+          "runtimeMode",
+          "interactionMode",
+          "planSidebar",
+          "contextWindow",
+          "contextPercentages",
+        ],
+        "contextPercentages",
+        "up",
+      ),
+    ).toEqual([
+      "model",
+      "traits",
+      "runtimeMode",
+      "interactionMode",
+      "planSidebar",
+      "contextPercentages",
       "contextWindow",
     ]);
   });

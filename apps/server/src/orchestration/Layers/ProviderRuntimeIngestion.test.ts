@@ -2814,6 +2814,53 @@ describe("ProviderRuntimeIngestion", () => {
     });
   });
 
+  it("projects account rate-limit updates into quiet thread activities", async () => {
+    const harness = await createHarness();
+    const now = "2026-01-01T00:00:00.000Z";
+
+    harness.emit({
+      type: "account.rate-limits.updated",
+      eventId: asEventId("evt-account-rate-limits-updated"),
+      provider: ProviderDriverKind.make("codex"),
+      createdAt: now,
+      threadId: asThreadId("thread-1"),
+      payload: {
+        rateLimits: {
+          rateLimits: {
+            primary: { usedPercent: 26, windowDurationMins: 10_080 },
+            secondary: { usedPercent: 69, windowDurationMins: 300 },
+          },
+        },
+      },
+    });
+
+    const thread = await waitForThread(harness.readModel, (entry) =>
+      entry.activities.some(
+        (activity: ProviderRuntimeTestActivity) => activity.kind === "account-rate-limits.updated",
+      ),
+    );
+
+    const rateLimitActivity = thread.activities.find(
+      (activity: ProviderRuntimeTestActivity) => activity.kind === "account-rate-limits.updated",
+    );
+    expect(rateLimitActivity).toMatchObject({
+      id: "evt-account-rate-limits-updated",
+      createdAt: now,
+      tone: "info",
+      kind: "account-rate-limits.updated",
+      summary: "Account rate limits updated",
+      turnId: null,
+    });
+    expect(rateLimitActivity?.payload).toMatchObject({
+      rateLimits: {
+        rateLimits: {
+          primary: { usedPercent: 26, windowDurationMins: 10_080 },
+          secondary: { usedPercent: 69, windowDurationMins: 300 },
+        },
+      },
+    });
+  });
+
   it("projects compacted thread state into context compaction activities", async () => {
     const harness = await createHarness();
     const now = "2026-01-01T00:00:00.000Z";
