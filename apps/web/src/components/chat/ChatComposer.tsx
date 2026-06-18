@@ -1,5 +1,6 @@
 import type {
   ApprovalRequestId,
+  ChatComposerFooterItemId,
   EnvironmentId,
   ModelSelection,
   PreviewAnnotationPayload,
@@ -26,6 +27,7 @@ import { serializeComposerFileLink } from "@t3tools/shared/composerTrigger";
 import { createModelSelection, normalizeModelSlug } from "@t3tools/shared/model";
 import {
   memo,
+  Fragment,
   useCallback,
   useEffect,
   useImperativeHandle,
@@ -83,6 +85,7 @@ import {
   renderProviderTraitsMenuContent,
   renderProviderTraitsPicker,
 } from "./composerProviderState";
+import { normalizeChatComposerFooterSettings } from "./composerFooterSettings";
 import { ContextWindowMeter } from "./ContextWindowMeter";
 import { buildExpandedImagePreview, type ExpandedImagePreview } from "./ExpandedImagePreview";
 import { basenameOfPath } from "../../pierre-icons";
@@ -190,30 +193,68 @@ function isInsideComposerFloatingLayer(element: Element): boolean {
   return element.closest(COMPOSER_FLOATING_LAYER_SELECTOR) !== null;
 }
 
-const ComposerFooterModeControls = memo(function ComposerFooterModeControls(props: {
-  showInteractionModeToggle: boolean;
-  interactionMode: ProviderInteractionMode;
+const ComposerFooterRuntimeModeControl = memo(function ComposerFooterRuntimeModeControl(props: {
   runtimeMode: RuntimeMode;
-  showPlanToggle: boolean;
-  planSidebarLabel: string;
-  planSidebarOpen: boolean;
-  onToggleInteractionMode: () => void;
   onRuntimeModeChange: (mode: RuntimeMode) => void;
-  onTogglePlanSidebar: () => void;
 }) {
   const runtimeModeOption = runtimeModeConfig[props.runtimeMode];
   const RuntimeModeIcon = runtimeModeOption.icon;
-  const interactionModeTooltip =
-    props.interactionMode === "plan"
-      ? "Plan mode — click to return to normal build mode"
-      : "Default mode — click to enter plan mode";
-  const planSidebarTooltip = props.planSidebarOpen
-    ? `Hide ${props.planSidebarLabel.toLowerCase()} sidebar`
-    : `Show ${props.planSidebarLabel.toLowerCase()} sidebar`;
 
-  const interactionModeToggle = props.showInteractionModeToggle ? (
-    <>
-      <Separator orientation="vertical" className="mx-0.5 hidden h-4 sm:block" />
+  return (
+    <Tooltip>
+      <Select
+        value={props.runtimeMode}
+        onValueChange={(value) => props.onRuntimeModeChange(value!)}
+      >
+        <TooltipTrigger
+          render={
+            <SelectTrigger
+              variant="ghost"
+              size="sm"
+              className="font-medium"
+              aria-label="Runtime mode"
+            />
+          }
+        >
+          <RuntimeModeIcon className="size-4" />
+          <SelectValue>{runtimeModeOption.label}</SelectValue>
+        </TooltipTrigger>
+        <SelectPopup alignItemWithTrigger={false}>
+          {runtimeModeOptions.map((mode) => {
+            const option = runtimeModeConfig[mode];
+            const OptionIcon = option.icon;
+            return (
+              <SelectItem key={mode} value={mode} className="min-w-64 py-2">
+                <div className="grid min-w-0 gap-0.5">
+                  <span className="inline-flex items-center gap-1.5 font-medium text-foreground">
+                    <OptionIcon className="size-3.5 shrink-0 text-muted-foreground" />
+                    {option.label}
+                  </span>
+                  <span className="text-muted-foreground text-xs leading-4">
+                    {option.description}
+                  </span>
+                </div>
+              </SelectItem>
+            );
+          })}
+        </SelectPopup>
+      </Select>
+      <TooltipPopup side="top">{runtimeModeOption.description}</TooltipPopup>
+    </Tooltip>
+  );
+});
+
+const ComposerFooterInteractionModeControl = memo(
+  function ComposerFooterInteractionModeControl(props: {
+    interactionMode: ProviderInteractionMode;
+    onToggleInteractionMode: () => void;
+  }) {
+    const interactionModeTooltip =
+      props.interactionMode === "plan"
+        ? "Plan mode — click to return to normal build mode"
+        : "Default mode — click to enter plan mode";
+
+    return (
       <Tooltip>
         <TooltipTrigger
           render={
@@ -243,94 +284,55 @@ const ComposerFooterModeControls = memo(function ComposerFooterModeControls(prop
         </TooltipTrigger>
         <TooltipPopup side="top">{interactionModeTooltip}</TooltipPopup>
       </Tooltip>
-    </>
-  ) : null;
+    );
+  },
+);
+
+const ComposerFooterPlanSidebarControl = memo(function ComposerFooterPlanSidebarControl(props: {
+  planSidebarLabel: string;
+  planSidebarOpen: boolean;
+  onTogglePlanSidebar: () => void;
+}) {
+  const planSidebarTooltip = props.planSidebarOpen
+    ? `Hide ${props.planSidebarLabel.toLowerCase()} sidebar`
+    : `Show ${props.planSidebarLabel.toLowerCase()} sidebar`;
 
   return (
-    <>
-      <Separator orientation="vertical" className="mx-0.5 hidden h-4 sm:block" />
-
-      <Tooltip>
-        <Select
-          value={props.runtimeMode}
-          onValueChange={(value) => props.onRuntimeModeChange(value!)}
-        >
-          <TooltipTrigger
-            render={
-              <SelectTrigger
-                variant="ghost"
-                size="sm"
-                className="font-medium"
-                aria-label="Runtime mode"
-              />
-            }
-          >
-            <RuntimeModeIcon className="size-4" />
-            <SelectValue>{runtimeModeOption.label}</SelectValue>
-          </TooltipTrigger>
-          <SelectPopup alignItemWithTrigger={false}>
-            {runtimeModeOptions.map((mode) => {
-              const option = runtimeModeConfig[mode];
-              const OptionIcon = option.icon;
-              return (
-                <SelectItem key={mode} value={mode} className="min-w-64 py-2">
-                  <div className="grid min-w-0 gap-0.5">
-                    <span className="inline-flex items-center gap-1.5 font-medium text-foreground">
-                      <OptionIcon className="size-3.5 shrink-0 text-muted-foreground" />
-                      {option.label}
-                    </span>
-                    <span className="text-muted-foreground text-xs leading-4">
-                      {option.description}
-                    </span>
-                  </div>
-                </SelectItem>
-              );
-            })}
-          </SelectPopup>
-        </Select>
-        <TooltipPopup side="top">{runtimeModeOption.description}</TooltipPopup>
-      </Tooltip>
-
-      {interactionModeToggle}
-
-      {props.showPlanToggle ? (
-        <>
-          <Separator orientation="vertical" className="mx-0.5 hidden h-4 sm:block" />
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button
-                  variant="ghost"
-                  className={cn(
-                    "shrink-0 whitespace-nowrap px-2 sm:px-3",
-                    props.planSidebarOpen
-                      ? "bg-blue-500/10 text-blue-400 hover:bg-blue-500/15 hover:text-blue-300"
-                      : "text-muted-foreground/70 hover:text-foreground/80",
-                  )}
-                  size="sm"
-                  type="button"
-                  onClick={props.onTogglePlanSidebar}
-                  aria-label={planSidebarTooltip}
-                />
-              }
-            >
-              <ListTodoIcon
-                className={props.planSidebarOpen ? "text-current opacity-100" : undefined}
-              />
-              <span className="sr-only sm:not-sr-only">{props.planSidebarLabel}</span>
-            </TooltipTrigger>
-            <TooltipPopup side="top">{planSidebarTooltip}</TooltipPopup>
-          </Tooltip>
-        </>
-      ) : null}
-    </>
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button
+            variant="ghost"
+            className={cn(
+              "shrink-0 whitespace-nowrap px-2 sm:px-3",
+              props.planSidebarOpen
+                ? "bg-blue-500/10 text-blue-400 hover:bg-blue-500/15 hover:text-blue-300"
+                : "text-muted-foreground/70 hover:text-foreground/80",
+            )}
+            size="sm"
+            type="button"
+            onClick={props.onTogglePlanSidebar}
+            aria-label={planSidebarTooltip}
+          />
+        }
+      >
+        <ListTodoIcon className={props.planSidebarOpen ? "text-current opacity-100" : undefined} />
+        <span className="sr-only sm:not-sr-only">{props.planSidebarLabel}</span>
+      </TooltipTrigger>
+      <TooltipPopup side="top">{planSidebarTooltip}</TooltipPopup>
+    </Tooltip>
   );
 });
+
+function ComposerFooterItemSeparator() {
+  return <Separator orientation="vertical" className="mx-0.5 hidden h-4 sm:block" />;
+}
 
 const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(props: {
   compact: boolean;
   activeContextWindow: ReturnType<typeof deriveLatestContextWindowSnapshot>;
   activeThreadProviderDisplayName: string | null;
+  showContextWindow?: boolean;
   isPreparingWorktree: boolean;
   pendingAction: {
     questionIndex: number;
@@ -353,7 +355,7 @@ const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(
 }) {
   return (
     <>
-      {props.activeContextWindow ? (
+      {props.showContextWindow !== false && props.activeContextWindow ? (
         <ContextWindowMeter
           usage={props.activeContextWindow}
           providerDisplayName={props.activeThreadProviderDisplayName}
@@ -1046,6 +1048,10 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
 
   const composerFooterHasWideActions = showPlanFollowUpPrompt || activePendingProgress !== null;
   const showPlanSidebarToggle = Boolean(activePlan || sidebarProposedPlan || planSidebarOpen);
+  const composerFooterSettings = useMemo(
+    () => normalizeChatComposerFooterSettings(settings.chatComposerFooter),
+    [settings.chatComposerFooter],
+  );
   const composerFooterActionLayoutKey = useMemo(() => {
     if (activePendingProgress) {
       return `pending:${activePendingProgress.questionIndex}:${activePendingProgress.isLastQuestion}:${activePendingIsResponding}`;
@@ -2038,6 +2044,71 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     ],
   );
 
+  const isComposerFooterItemVisible = (itemId: ChatComposerFooterItemId) =>
+    !composerFooterSettings.hiddenItemIdSet.has(itemId);
+  const composerFooterLeftItemIds = composerFooterSettings.leftItemIds.filter((itemId) => {
+    if (itemId === "traits") return providerTraitsPicker !== null;
+    if (itemId === "interactionMode") return composerProviderControls.showInteractionModeToggle;
+    if (itemId === "planSidebar") return showPlanSidebarToggle;
+    return itemId !== "contextWindow";
+  });
+  const renderComposerModelPicker = () => (
+    <ProviderModelPicker
+      compact={isComposerFooterCompact}
+      activeInstanceId={selectedInstanceId}
+      model={selectedModelForPickerWithCustomFallback}
+      lockedProvider={lockedProvider}
+      lockedContinuationGroupKey={lockedContinuationGroupKey}
+      instanceEntries={providerInstanceEntries}
+      keybindings={keybindings}
+      modelOptionsByInstance={modelOptionsByInstance}
+      terminalOpen={terminalOpen}
+      open={isComposerModelPickerOpen}
+      {...(composerProviderState.modelPickerIconClassName
+        ? {
+            activeProviderIconClassName: composerProviderState.modelPickerIconClassName,
+          }
+        : {})}
+      onOpenChange={(open) => {
+        setIsComposerModelPickerOpen(open);
+      }}
+      getModelDisabledReason={getModelDisabledReason}
+      onInstanceModelChange={onProviderModelSelect}
+    />
+  );
+  const renderComposerFooterLeftItem = (itemId: ChatComposerFooterItemId) => {
+    switch (itemId) {
+      case "model":
+        return renderComposerModelPicker();
+      case "traits":
+        return providerTraitsPicker;
+      case "runtimeMode":
+        return (
+          <ComposerFooterRuntimeModeControl
+            runtimeMode={runtimeMode}
+            onRuntimeModeChange={handleRuntimeModeChange}
+          />
+        );
+      case "interactionMode":
+        return (
+          <ComposerFooterInteractionModeControl
+            interactionMode={interactionMode}
+            onToggleInteractionMode={toggleInteractionMode}
+          />
+        );
+      case "planSidebar":
+        return (
+          <ComposerFooterPlanSidebarControl
+            planSidebarLabel={planSidebarLabel}
+            planSidebarOpen={planSidebarOpen}
+            onTogglePlanSidebar={togglePlanSidebar}
+          />
+        );
+      case "contextWindow":
+        return null;
+    }
+  };
+
   // Render
   // ------------------------------------------------------------------
   return (
@@ -2470,62 +2541,36 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
               )}
             >
               <div className="-m-1 flex min-w-0 flex-1 items-center gap-1 overflow-x-auto p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                <ProviderModelPicker
-                  compact={isComposerFooterCompact}
-                  activeInstanceId={selectedInstanceId}
-                  model={selectedModelForPickerWithCustomFallback}
-                  lockedProvider={lockedProvider}
-                  lockedContinuationGroupKey={lockedContinuationGroupKey}
-                  instanceEntries={providerInstanceEntries}
-                  keybindings={keybindings}
-                  modelOptionsByInstance={modelOptionsByInstance}
-                  terminalOpen={terminalOpen}
-                  open={isComposerModelPickerOpen}
-                  {...(composerProviderState.modelPickerIconClassName
-                    ? {
-                        activeProviderIconClassName: composerProviderState.modelPickerIconClassName,
-                      }
-                    : {})}
-                  onOpenChange={(open) => {
-                    setIsComposerModelPickerOpen(open);
-                  }}
-                  getModelDisabledReason={getModelDisabledReason}
-                  onInstanceModelChange={onProviderModelSelect}
-                />
-
                 {isComposerFooterCompact ? (
-                  <CompactComposerControlsMenu
-                    activePlan={showPlanSidebarToggle}
-                    interactionMode={interactionMode}
-                    planSidebarLabel={planSidebarLabel}
-                    planSidebarOpen={planSidebarOpen}
-                    runtimeMode={runtimeMode}
-                    showInteractionModeToggle={composerProviderControls.showInteractionModeToggle}
-                    traitsMenuContent={providerTraitsMenuContent}
-                    onToggleInteractionMode={toggleInteractionMode}
-                    onTogglePlanSidebar={togglePlanSidebar}
-                    onRuntimeModeChange={handleRuntimeModeChange}
-                  />
-                ) : (
                   <>
-                    {providerTraitsPicker ? (
-                      <>
-                        <Separator orientation="vertical" className="mx-0.5 hidden h-4 sm:block" />
-                        {providerTraitsPicker}
-                      </>
-                    ) : null}
-                    <ComposerFooterModeControls
-                      showInteractionModeToggle={composerProviderControls.showInteractionModeToggle}
+                    {isComposerFooterItemVisible("model") ? renderComposerModelPicker() : null}
+                    <CompactComposerControlsMenu
+                      activePlan={showPlanSidebarToggle}
                       interactionMode={interactionMode}
-                      runtimeMode={runtimeMode}
-                      showPlanToggle={showPlanSidebarToggle}
                       planSidebarLabel={planSidebarLabel}
                       planSidebarOpen={planSidebarOpen}
+                      runtimeMode={runtimeMode}
+                      showInteractionModeToggle={
+                        isComposerFooterItemVisible("interactionMode") &&
+                        composerProviderControls.showInteractionModeToggle
+                      }
+                      showRuntimeMode={isComposerFooterItemVisible("runtimeMode")}
+                      showPlanSidebar={isComposerFooterItemVisible("planSidebar")}
+                      traitsMenuContent={
+                        isComposerFooterItemVisible("traits") ? providerTraitsMenuContent : null
+                      }
                       onToggleInteractionMode={toggleInteractionMode}
-                      onRuntimeModeChange={handleRuntimeModeChange}
                       onTogglePlanSidebar={togglePlanSidebar}
+                      onRuntimeModeChange={handleRuntimeModeChange}
                     />
                   </>
+                ) : (
+                  composerFooterLeftItemIds.map((itemId, index) => (
+                    <Fragment key={itemId}>
+                      {index > 0 ? <ComposerFooterItemSeparator /> : null}
+                      {renderComposerFooterLeftItem(itemId)}
+                    </Fragment>
+                  ))
                 )}
               </div>
 
@@ -2541,6 +2586,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   compact={isComposerPrimaryActionsCompact}
                   activeContextWindow={activeContextWindow}
                   activeThreadProviderDisplayName={activeThreadProviderDisplayName}
+                  showContextWindow={isComposerFooterItemVisible("contextWindow")}
                   pendingAction={pendingPrimaryAction}
                   isRunning={phase === "running"}
                   showPlanFollowUpPrompt={pendingUserInputs.length === 0 && showPlanFollowUpPrompt}

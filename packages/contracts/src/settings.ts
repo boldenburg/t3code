@@ -39,8 +39,46 @@ export const SidebarThreadPreviewCount = Schema.Int.check(
 export type SidebarThreadPreviewCount = typeof SidebarThreadPreviewCount.Type;
 export const DEFAULT_SIDEBAR_THREAD_PREVIEW_COUNT: SidebarThreadPreviewCount = 6;
 
+export const ChatComposerFooterItemId = Schema.Literals([
+  "model",
+  "traits",
+  "runtimeMode",
+  "interactionMode",
+  "planSidebar",
+  "contextWindow",
+]);
+export type ChatComposerFooterItemId = typeof ChatComposerFooterItemId.Type;
+export const DEFAULT_CHAT_COMPOSER_FOOTER_ITEM_ORDER: ChatComposerFooterItemId[] = [
+  "model",
+  "traits",
+  "runtimeMode",
+  "interactionMode",
+  "planSidebar",
+  "contextWindow",
+];
+export const ChatComposerFooterSettingsSchema = Schema.Struct({
+  itemOrder: Schema.Array(ChatComposerFooterItemId).pipe(
+    Schema.withDecodingDefault(Effect.sync(() => [...DEFAULT_CHAT_COMPOSER_FOOTER_ITEM_ORDER])),
+  ),
+  hiddenItemIds: Schema.Array(ChatComposerFooterItemId).pipe(
+    Schema.withDecodingDefault(Effect.succeed([])),
+  ),
+}).pipe(
+  Schema.withDecodingDefault(
+    Effect.sync(() => ({
+      itemOrder: [...DEFAULT_CHAT_COMPOSER_FOOTER_ITEM_ORDER],
+      hiddenItemIds: [],
+    })),
+  ),
+);
+export type ChatComposerFooterSettings = typeof ChatComposerFooterSettingsSchema.Type;
+export const DEFAULT_CHAT_COMPOSER_FOOTER_SETTINGS: ChatComposerFooterSettings = Schema.decodeSync(
+  ChatComposerFooterSettingsSchema,
+)({});
+
 export const ClientSettingsSchema = Schema.Struct({
   autoOpenPlanSidebar: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  chatComposerFooter: ChatComposerFooterSettingsSchema,
   confirmThreadArchive: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   confirmThreadDelete: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
   dismissedProviderUpdateNotificationKeys: Schema.Array(TrimmedNonEmptyString).pipe(
@@ -535,6 +573,7 @@ export type ServerSettingsPatch = typeof ServerSettingsPatch.Type;
 
 export const ClientSettingsPatch = Schema.Struct({
   autoOpenPlanSidebar: Schema.optionalKey(Schema.Boolean),
+  chatComposerFooter: Schema.optionalKey(ChatComposerFooterSettingsSchema),
   confirmThreadArchive: Schema.optionalKey(Schema.Boolean),
   confirmThreadDelete: Schema.optionalKey(Schema.Boolean),
   diffIgnoreWhitespace: Schema.optionalKey(Schema.Boolean),

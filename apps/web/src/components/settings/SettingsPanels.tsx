@@ -66,6 +66,7 @@ import { Switch } from "../ui/switch";
 import { stackedThreadToast, toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { AddProviderInstanceDialog } from "./AddProviderInstanceDialog";
+import { ComposerFooterSettings } from "./ComposerFooterSettings";
 import {
   canOneClickUpdateProviderCandidate,
   collectProviderUpdateCandidates,
@@ -720,6 +721,8 @@ export function GeneralSettingsPanel() {
             />
           }
         />
+
+        <ComposerFooterSettings />
 
         <SettingsRow
           title="New threads"
