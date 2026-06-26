@@ -127,12 +127,14 @@ function isUnknownPendingApprovalRequestError(cause: Cause.Cause<ProviderService
     const detail = error.detail.toLowerCase();
     return (
       detail.includes("unknown pending approval request") ||
+      detail.includes("unknown pending codex approval request") ||
       detail.includes("unknown pending permission request")
     );
   }
-  const message = Cause.pretty(cause);
+  const message = Cause.pretty(cause).toLowerCase();
   return (
     message.includes("unknown pending approval request") ||
+    message.includes("unknown pending codex approval request") ||
     message.includes("unknown pending permission request")
   );
 }

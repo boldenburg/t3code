@@ -13,6 +13,7 @@ import {
 
 import {
   buildThreadFeed,
+  derivePendingApprovals,
   deriveThreadFeedPresentation,
   type ThreadFeedActivity,
   type ThreadFeedEntry,
@@ -54,6 +55,35 @@ function makeThread(
 }
 
 describe("buildThreadFeed", () => {
+  it("clears timed-out Codex approvals after the provider drops the request id", () => {
+    const activities: OrchestrationThreadActivity[] = [
+      makeActivity({
+        id: EventId.make("approval-open-codex-stale"),
+        createdAt: "2026-04-01T00:00:01.000Z",
+        kind: "approval.requested",
+        summary: "Command approval requested",
+        tone: "approval",
+        payload: {
+          requestId: "req-codex-stale-1",
+          requestKind: "command",
+        },
+      }),
+      makeActivity({
+        id: EventId.make("approval-failed-codex-stale"),
+        createdAt: "2026-04-01T00:00:02.000Z",
+        kind: "provider.approval.respond.failed",
+        summary: "Provider approval response failed",
+        tone: "error",
+        payload: {
+          requestId: "req-codex-stale-1",
+          detail: "Unknown pending Codex approval request: req-codex-stale-1",
+        },
+      }),
+    ];
+
+    expect(derivePendingApprovals(activities)).toEqual([]);
+  });
+
   it("keeps historic work entries attributed to their turns", () => {
     const thread = makeThread({
       id: ThreadId.make("thread-1"),

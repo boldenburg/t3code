@@ -1857,7 +1857,7 @@ describe("ProviderCommandReactor", () => {
         new ProviderAdapterRequestError({
           provider: ProviderDriverKind.make("codex"),
           method: "session/request_permission",
-          detail: "Unknown pending permission request: approval-request-1",
+          detail: "Unknown pending Codex approval request: approval-request-1",
         }),
       ),
     );

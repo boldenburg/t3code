@@ -823,6 +823,44 @@ export const makeCodexSessionRuntime = (
           ),
         ),
       );
+    const retirePendingApprovalIfOpen = (requestId: ApprovalRequestId) =>
+      Ref.modify(pendingApprovalsRef, (current) => {
+        const pending = current.get(requestId);
+        if (!pending) {
+          return [null, current] as const;
+        }
+        const next = new Map(current);
+        next.delete(requestId);
+        return [pending, next] as const;
+      }).pipe(
+        Effect.flatMap((pending) => {
+          if (!pending) {
+            return Effect.void;
+          }
+          return Ref.update(approvalCorrelationsRef, (current) => {
+            const next = new Map(current);
+            next.delete(pending.jsonRpcId);
+            return next;
+          }).pipe(
+            Effect.andThen(
+              emitEvent({
+                kind: "notification",
+                threadId: options.threadId,
+                method: "serverRequest/resolved",
+                requestId: pending.requestId,
+                requestKind: pending.requestKind,
+                ...(pending.turnId ? { turnId: pending.turnId } : {}),
+                ...(pending.itemId ? { itemId: pending.itemId } : {}),
+                payload: {
+                  requestId: pending.jsonRpcId,
+                  threadId: options.threadId,
+                },
+              }),
+            ),
+          );
+        }),
+        Effect.catch(() => Effect.void),
+      );
 
     const handleRawNotification = (notification: CodexServerNotification) =>
       Effect.gen(function* () {
@@ -991,13 +1029,7 @@ export const makeCodexSessionRuntime = (
         });
 
         const resolved = yield* Deferred.await(decision).pipe(
-          Effect.ensuring(
-            Ref.update(pendingApprovalsRef, (current) => {
-              const next = new Map(current);
-              next.delete(requestId);
-              return next;
-            }),
-          ),
+          Effect.ensuring(retirePendingApprovalIfOpen(requestId)),
         );
         return {
           decision: resolved,
@@ -1049,13 +1081,7 @@ export const makeCodexSessionRuntime = (
         });
 
         const resolved = yield* Deferred.await(decision).pipe(
-          Effect.ensuring(
-            Ref.update(pendingApprovalsRef, (current) => {
-              const next = new Map(current);
-              next.delete(requestId);
-              return next;
-            }),
-          ),
+          Effect.ensuring(retirePendingApprovalIfOpen(requestId)),
         );
         return {
           decision: resolved,

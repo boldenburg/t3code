@@ -146,6 +146,35 @@ describe("derivePendingApprovals", () => {
     expect(derivePendingApprovals(activities)).toEqual([]);
   });
 
+  it("clears timed-out Codex approvals after the provider drops the request id", () => {
+    const activities: OrchestrationThreadActivity[] = [
+      makeActivity({
+        id: "approval-open-codex-stale",
+        createdAt: "2026-02-23T00:00:01.000Z",
+        kind: "approval.requested",
+        summary: "Command approval requested",
+        tone: "approval",
+        payload: {
+          requestId: "req-codex-stale-1",
+          requestKind: "command",
+        },
+      }),
+      makeActivity({
+        id: "approval-failed-codex-stale",
+        createdAt: "2026-02-23T00:00:02.000Z",
+        kind: "provider.approval.respond.failed",
+        summary: "Provider approval response failed",
+        tone: "error",
+        payload: {
+          requestId: "req-codex-stale-1",
+          detail: "Unknown pending Codex approval request: req-codex-stale-1",
+        },
+      }),
+    ];
+
+    expect(derivePendingApprovals(activities)).toEqual([]);
+  });
+
   it("clears stale pending approvals when the backend marks them stale after restart", () => {
     const activities: OrchestrationThreadActivity[] = [
       makeActivity({
