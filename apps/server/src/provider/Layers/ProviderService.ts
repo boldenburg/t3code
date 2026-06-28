@@ -26,6 +26,7 @@ import {
   type ProviderSession,
 } from "@t3tools/contracts";
 import { causeErrorTag } from "@t3tools/shared/observability";
+import * as Cause from "effect/Cause";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -180,6 +181,30 @@ const dieOnMissingBindingInstanceId = (
   );
 };
 
+function readRuntimeErrorMessage(event: ProviderRuntimeEvent): string | undefined {
+  if (event.type !== "runtime.error") return undefined;
+  const payload: unknown = event.payload;
+  if (typeof payload !== "object" || payload === null || !("message" in payload)) {
+    return undefined;
+  }
+  const message = payload.message;
+  return typeof message === "string" ? message : undefined;
+}
+
+function readCodexMalformedArgumentsRuntimeErrorMessage(
+  event: ProviderRuntimeEvent,
+): string | undefined {
+  if (String(event.provider) !== "codex") return undefined;
+  const message = readRuntimeErrorMessage(event);
+  if (message === undefined) return undefined;
+  const normalized = message.toLowerCase();
+  return normalized.includes("property_name_above_max_length") &&
+    normalized.includes("invalid property name") &&
+    normalized.includes(".arguments")
+    ? message
+    : undefined;
+}
+
 const correlateRuntimeEventWithInstance = (
   source: {
     readonly instanceId: ProviderInstanceId;
@@ -290,6 +315,35 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     event: ProviderRuntimeEvent,
   ): Effect.Effect<void> =>
     Effect.sync(() => correlateRuntimeEventWithInstance(source, event)).pipe(
+      Effect.tap((canonicalEvent) => {
+        const malformedArgumentsMessage =
+          readCodexMalformedArgumentsRuntimeErrorMessage(canonicalEvent);
+        return malformedArgumentsMessage === undefined
+          ? Effect.void
+          : directory
+              .upsert({
+                threadId: canonicalEvent.threadId,
+                provider: canonicalEvent.provider,
+                providerInstanceId: source.instanceId,
+                status: "error",
+                resumeCursor: null,
+                runtimePayload: {
+                  activeTurnId: canonicalEvent.turnId ?? null,
+                  lastError: malformedArgumentsMessage,
+                  lastRuntimeEvent: "provider.runtimeError.resumeCursorCleared",
+                  lastRuntimeEventAt: canonicalEvent.createdAt,
+                },
+              })
+              .pipe(
+                Effect.catchCause((cause) =>
+                  Effect.logWarning("provider.session.clear-resume-cursor-failed", {
+                    threadId: canonicalEvent.threadId,
+                    provider: canonicalEvent.provider,
+                    cause: Cause.pretty(cause),
+                  }),
+                ),
+              );
+      }),
       Effect.flatMap((canonicalEvent) =>
         increment(providerRuntimeEventsTotal, {
           provider: canonicalEvent.provider,

@@ -1592,6 +1592,56 @@ fanout.layer("ProviderServiceLive fanout", (it) => {
     }),
   );
 
+  it.effect("clears Codex resume cursor after malformed arguments runtime errors", () =>
+    Effect.gen(function* () {
+      const provider = yield* ProviderService.ProviderService;
+      const directory = yield* ProviderSessionDirectory.ProviderSessionDirectory;
+      const threadId = asThreadId("thread-malformed-arguments");
+      yield* provider.startSession(threadId, {
+        provider: ProviderDriverKind.make("codex"),
+        providerInstanceId: codexInstanceId,
+        threadId,
+        runtimeMode: "full-access",
+      });
+
+      const initialBinding = Option.getOrUndefined(yield* directory.getBinding(threadId));
+      assert.deepEqual(initialBinding?.resumeCursor, {
+        opaque: `resume-${String(threadId)}`,
+      });
+
+      fanout.codex.emit({
+        type: "runtime.error",
+        eventId: asEventId("evt-malformed-arguments"),
+        provider: ProviderDriverKind.make("codex"),
+        providerInstanceId: codexInstanceId,
+        createdAt: "2026-01-01T00:00:00.000Z",
+        threadId,
+        turnId: asTurnId("turn-1"),
+        payload: {
+          message:
+            "[ObjectParam] [input[41].arguments] [property_name_above_max_length] Invalid property name in 'input[41].arguments': 'x' is too long.",
+          class: "provider_error",
+        },
+      });
+      yield* advanceTestClock(50);
+
+      const clearedBinding = Option.getOrUndefined(yield* directory.getBinding(threadId));
+      assert.equal(clearedBinding?.resumeCursor, null);
+      assert.equal(clearedBinding?.status, "error");
+
+      yield* provider.startSession(threadId, {
+        provider: ProviderDriverKind.make("codex"),
+        providerInstanceId: codexInstanceId,
+        threadId,
+        runtimeMode: "full-access",
+      });
+      const secondStartInput = fanout.codex.startSession.mock.calls.at(-1)?.[0] as
+        | { readonly resumeCursor?: unknown }
+        | undefined;
+      assert.equal(secondStartInput?.resumeCursor, null);
+    }),
+  );
+
   it.effect("keeps subscriber delivery ordered and isolates failing subscribers", () =>
     Effect.gen(function* () {
       const provider = yield* ProviderService.ProviderService;
