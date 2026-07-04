@@ -1,4 +1,5 @@
 import {
+  CheckpointRef,
   EventId,
   MessageId,
   ThreadId,
@@ -13,6 +14,7 @@ import {
   derivePendingApprovals,
   derivePendingUserInputs,
   deriveTimelineEntries,
+  deriveRevertTurnCountByUserMessageId,
   deriveWorkLogEntries,
   findLatestProposedPlan,
   findSidebarProposedPlan,
@@ -22,6 +24,7 @@ import {
   workEntryIndicatesToolNeutralStatus,
   workEntryIndicatesToolSuccess,
 } from "./session-logic";
+import type { ChatMessage, TurnDiffSummary } from "./types";
 
 let nextActivityId = 0;
 
@@ -1565,6 +1568,115 @@ describe("deriveTimelineEntries", () => {
         implementationThreadId: null,
       },
     });
+  });
+});
+
+describe("deriveRevertTurnCountByUserMessageId", () => {
+  it("binds each user message to the first following checkpoint in one pass", () => {
+    const user1 = MessageId.make("user-1");
+    const user2 = MessageId.make("user-2");
+    const user3 = MessageId.make("user-3");
+    const assistantCommentary = MessageId.make("assistant-commentary");
+    const assistant1 = MessageId.make("assistant-1");
+    const assistant2 = MessageId.make("assistant-2");
+    const assistantWithoutSummary = MessageId.make("assistant-without-summary");
+    const turn1 = TurnId.make("turn-1");
+    const turn2 = TurnId.make("turn-2");
+    const message = (
+      input: Pick<ChatMessage, "id" | "role" | "text" | "createdAt">,
+    ): ChatMessage => ({
+      ...input,
+      turnId: null,
+      updatedAt: input.createdAt,
+      streaming: false,
+    });
+    const checkpoint = (
+      input: Pick<
+        TurnDiffSummary,
+        "turnId" | "completedAt" | "checkpointTurnCount" | "assistantMessageId"
+      >,
+    ): TurnDiffSummary => ({
+      ...input,
+      checkpointRef: CheckpointRef.make(`checkpoint-${input.turnId}`),
+      status: "ready",
+      files: [],
+    });
+    const timelineEntries = deriveTimelineEntries(
+      [
+        message({
+          id: user1,
+          role: "user",
+          text: "one",
+          createdAt: "2026-02-23T00:00:00.000Z",
+        }),
+        message({
+          id: assistantCommentary,
+          role: "assistant",
+          text: "thinking",
+          createdAt: "2026-02-23T00:00:01.000Z",
+        }),
+        message({
+          id: assistant1,
+          role: "assistant",
+          text: "done",
+          createdAt: "2026-02-23T00:00:02.000Z",
+        }),
+        message({
+          id: user2,
+          role: "user",
+          text: "two",
+          createdAt: "2026-02-23T00:00:03.000Z",
+        }),
+        message({
+          id: assistant2,
+          role: "assistant",
+          text: "done",
+          createdAt: "2026-02-23T00:00:04.000Z",
+        }),
+        message({
+          id: user3,
+          role: "user",
+          text: "three",
+          createdAt: "2026-02-23T00:00:05.000Z",
+        }),
+        message({
+          id: assistantWithoutSummary,
+          role: "assistant",
+          text: "done",
+          createdAt: "2026-02-23T00:00:06.000Z",
+        }),
+      ],
+      [],
+      [],
+    );
+    const result = deriveRevertTurnCountByUserMessageId({
+      timelineEntries,
+      turnDiffSummaryByAssistantMessageId: new Map([
+        [
+          assistant1,
+          checkpoint({
+            turnId: turn1,
+            completedAt: "2026-02-23T00:00:02.000Z",
+            checkpointTurnCount: 4,
+            assistantMessageId: assistant1,
+          }),
+        ],
+        [
+          assistant2,
+          checkpoint({
+            turnId: turn2,
+            completedAt: "2026-02-23T00:00:04.000Z",
+            checkpointTurnCount: 1,
+            assistantMessageId: assistant2,
+          }),
+        ],
+      ]),
+      inferredCheckpointTurnCountByTurnId: {},
+    });
+
+    expect(result.get(user1)).toBe(3);
+    expect(result.get(user2)).toBe(0);
+    expect(result.has(user3)).toBe(false);
   });
 });
 

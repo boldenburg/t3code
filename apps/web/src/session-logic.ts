@@ -9,6 +9,7 @@ import {
   ProviderDriverKind,
   type ToolLifecycleItemType,
   type UserInputQuestion,
+  type MessageId,
   type ThreadId,
   type TurnId,
 } from "@t3tools/contracts";
@@ -1365,6 +1366,42 @@ export function deriveTimelineEntries(
   return [...messageRows, ...proposedPlanRows, ...workRows].toSorted((a, b) =>
     a.createdAt.localeCompare(b.createdAt),
   );
+}
+
+export function deriveRevertTurnCountByUserMessageId(input: {
+  timelineEntries: ReadonlyArray<TimelineEntry>;
+  turnDiffSummaryByAssistantMessageId: ReadonlyMap<MessageId, TurnDiffSummary>;
+  inferredCheckpointTurnCountByTurnId: Readonly<Record<TurnId, number>>;
+}): Map<MessageId, number> {
+  const byUserMessageId = new Map<MessageId, number>();
+  let pendingUserMessageId: MessageId | null = null;
+
+  for (const entry of input.timelineEntries) {
+    if (entry.kind !== "message") {
+      continue;
+    }
+    if (entry.message.role === "user") {
+      pendingUserMessageId = entry.message.id;
+      continue;
+    }
+    if (!pendingUserMessageId) {
+      continue;
+    }
+
+    const summary = input.turnDiffSummaryByAssistantMessageId.get(entry.message.id);
+    if (!summary) {
+      continue;
+    }
+
+    const turnCount =
+      summary.checkpointTurnCount ?? input.inferredCheckpointTurnCountByTurnId[summary.turnId];
+    if (typeof turnCount === "number") {
+      byUserMessageId.set(pendingUserMessageId, Math.max(0, turnCount - 1));
+    }
+    pendingUserMessageId = null;
+  }
+
+  return byUserMessageId;
 }
 
 export function inferCheckpointTurnCountByTurnId(

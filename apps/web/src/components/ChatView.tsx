@@ -75,6 +75,7 @@ import {
   derivePendingApprovals,
   derivePendingUserInputs,
   derivePhase,
+  deriveRevertTurnCountByUserMessageId,
   deriveTimelineEntries,
   deriveActiveWorkStartedAt,
   deriveActivePlanState,
@@ -2074,36 +2075,11 @@ function ChatViewContent(props: ChatViewProps) {
     return byMessageId;
   }, [turnDiffSummaries]);
   const revertTurnCountByUserMessageId = useMemo(() => {
-    const byUserMessageId = new Map<MessageId, number>();
-    for (let index = 0; index < timelineEntries.length; index += 1) {
-      const entry = timelineEntries[index];
-      if (!entry || entry.kind !== "message" || entry.message.role !== "user") {
-        continue;
-      }
-
-      for (let nextIndex = index + 1; nextIndex < timelineEntries.length; nextIndex += 1) {
-        const nextEntry = timelineEntries[nextIndex];
-        if (!nextEntry || nextEntry.kind !== "message") {
-          continue;
-        }
-        if (nextEntry.message.role === "user") {
-          break;
-        }
-        const summary = turnDiffSummaryByAssistantMessageId.get(nextEntry.message.id);
-        if (!summary) {
-          continue;
-        }
-        const turnCount =
-          summary.checkpointTurnCount ?? inferredCheckpointTurnCountByTurnId[summary.turnId];
-        if (typeof turnCount !== "number") {
-          break;
-        }
-        byUserMessageId.set(entry.message.id, Math.max(0, turnCount - 1));
-        break;
-      }
-    }
-
-    return byUserMessageId;
+    return deriveRevertTurnCountByUserMessageId({
+      timelineEntries,
+      turnDiffSummaryByAssistantMessageId,
+      inferredCheckpointTurnCountByTurnId,
+    });
   }, [inferredCheckpointTurnCountByTurnId, timelineEntries, turnDiffSummaryByAssistantMessageId]);
 
   const gitCwd = activeProject
