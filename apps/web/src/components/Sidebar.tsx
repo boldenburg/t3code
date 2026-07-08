@@ -908,7 +908,7 @@ interface SidebarProjectThreadListProps {
   confirmingArchiveThreadKey: string | null;
   setConfirmingArchiveThreadKey: React.Dispatch<React.SetStateAction<string | null>>;
   confirmArchiveButtonRefs: React.RefObject<Map<string, HTMLButtonElement>>;
-  attachThreadListAutoAnimateRef: (node: HTMLElement | null) => void;
+  attachThreadListAutoAnimateRef: React.RefCallback<HTMLElement>;
   handleThreadClick: (
     event: React.MouseEvent,
     threadRef: ScopedThreadRef,
@@ -1070,7 +1070,7 @@ interface SidebarProjectItemProps {
   archiveThread: ReturnType<typeof useThreadActions>["archiveThread"];
   deleteThread: ReturnType<typeof useThreadActions>["deleteThread"];
   threadJumpLabelByKey: ReadonlyMap<string, string>;
-  attachThreadListAutoAnimateRef: (node: HTMLElement | null) => void;
+  attachThreadListAutoAnimateRef: React.RefCallback<HTMLElement>;
   expandThreadListForProject: (projectKey: string) => void;
   collapseThreadListForProject: (projectKey: string) => void;
   dragInProgressRef: React.RefObject<boolean>;
@@ -2859,13 +2859,13 @@ interface SidebarProjectsContentProps {
   newThreadShortcutLabel: string | null;
   commandPaletteShortcutLabel: string | null;
   threadJumpLabelByKey: ReadonlyMap<string, string>;
-  attachThreadListAutoAnimateRef: (node: HTMLElement | null) => void;
+  attachThreadListAutoAnimateRef: React.RefCallback<HTMLElement>;
   expandThreadListForProject: (projectKey: string) => void;
   collapseThreadListForProject: (projectKey: string) => void;
   dragInProgressRef: React.RefObject<boolean>;
   suppressProjectClickAfterDragRef: React.RefObject<boolean>;
   suppressProjectClickForContextMenuRef: React.RefObject<boolean>;
-  attachProjectListAutoAnimateRef: (node: HTMLElement | null) => void;
+  attachProjectListAutoAnimateRef: React.RefCallback<HTMLElement>;
   projectsLength: number;
 }
 
@@ -3347,22 +3347,20 @@ export default function Sidebar() {
     dragInProgressRef.current = false;
   }, []);
 
-  const animatedProjectListsRef = useRef(new WeakSet<HTMLElement>());
-  const attachProjectListAutoAnimateRef = useCallback((node: HTMLElement | null) => {
-    if (!node || animatedProjectListsRef.current.has(node)) {
+  const attachProjectListAutoAnimateRef = useCallback<React.RefCallback<HTMLElement>>((node) => {
+    if (!node) {
       return;
     }
-    autoAnimate(node, SIDEBAR_LIST_ANIMATION_OPTIONS);
-    animatedProjectListsRef.current.add(node);
+    const controller = autoAnimate(node, SIDEBAR_LIST_ANIMATION_OPTIONS);
+    return () => controller.destroy?.();
   }, []);
 
-  const animatedThreadListsRef = useRef(new WeakSet<HTMLElement>());
-  const attachThreadListAutoAnimateRef = useCallback((node: HTMLElement | null) => {
-    if (!node || animatedThreadListsRef.current.has(node)) {
+  const attachThreadListAutoAnimateRef = useCallback<React.RefCallback<HTMLElement>>((node) => {
+    if (!node) {
       return;
     }
-    autoAnimate(node, SIDEBAR_LIST_ANIMATION_OPTIONS);
-    animatedThreadListsRef.current.add(node);
+    const controller = autoAnimate(node, SIDEBAR_LIST_ANIMATION_OPTIONS);
+    return () => controller.destroy?.();
   }, []);
 
   const visibleThreads = useMemo(
