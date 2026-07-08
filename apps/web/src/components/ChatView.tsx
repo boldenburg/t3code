@@ -1047,6 +1047,7 @@ function ChatViewContent(props: ChatViewProps) {
   );
   const timestampFormat = settings.timestampFormat;
   const autoOpenPlanSidebar = settings.autoOpenPlanSidebar;
+  const autoScrollSentMessageToTop = settings.autoScrollSentMessageToTop;
   const navigate = useNavigate();
   const { resolvedTheme } = useTheme();
   // Granular store selectors — avoid subscribing to prompt changes.
@@ -3225,6 +3226,25 @@ function ChatViewContent(props: ChatViewProps) {
     setShowScrollToBottom(false);
     void legendListRef.current?.scrollToEnd?.({ animated });
   }, []);
+  const prepareTimelineForLocalSend = useCallback(
+    (threadRef: ScopedThreadRef, messageIdForSend: MessageId) => {
+      const shouldAnchorSentMessage = autoScrollSentMessageToTop;
+      isAtEndRef.current = true;
+      timelineScrollModeRef.current = shouldAnchorSentMessage
+        ? "anchoring-new-turn"
+        : "following-end";
+      liveFollowUserScrollGenerationRef.current = anchorUserScrollGenerationRef.current;
+      pendingTimelineAnchorRef.current = shouldAnchorSentMessage ? messageIdForSend : null;
+      activeTimelineAnchorIndexRef.current = null;
+      showScrollDebouncer.current.cancel();
+      setShowScrollToBottom(false);
+      setTimelineAnchor({
+        threadKey: scopedThreadKey(threadRef),
+        messageId: shouldAnchorSentMessage ? messageIdForSend : null,
+      });
+    },
+    [autoScrollSentMessageToTop],
+  );
   useEffect(() => {
     let removeListeners: (() => void) | null = null;
     const frame = requestAnimationFrame(() => {
@@ -4002,20 +4022,10 @@ function ChatViewContent(props: ChatViewProps) {
       sizeBytes: image.sizeBytes,
       previewUrl: image.previewUrl,
     }));
-    // Sending always returns to the live edge. The new row becomes the
-    // anchored end-space target so it lands near the top while the response
-    // streams into the reserved space below it.
-    isAtEndRef.current = true;
-    timelineScrollModeRef.current = "anchoring-new-turn";
-    liveFollowUserScrollGenerationRef.current = anchorUserScrollGenerationRef.current;
-    pendingTimelineAnchorRef.current = messageIdForSend;
-    activeTimelineAnchorIndexRef.current = null;
-    showScrollDebouncer.current.cancel();
-    setShowScrollToBottom(false);
-    setTimelineAnchor({
-      threadKey: scopedThreadKey(scopeThreadRef(activeThread.environmentId, threadIdForSend)),
-      messageId: messageIdForSend,
-    });
+    prepareTimelineForLocalSend(
+      scopeThreadRef(activeThread.environmentId, threadIdForSend),
+      messageIdForSend,
+    );
     setOptimisticUserMessages((existing) => [
       ...existing,
       {
@@ -4441,18 +4451,10 @@ function ChatViewContent(props: ChatViewProps) {
       beginLocalDispatch({ preparingWorktree: false });
       setThreadError(threadIdForSend, null);
 
-      // Position this sent row once LegendList has measured the anchored tail.
-      isAtEndRef.current = true;
-      timelineScrollModeRef.current = "anchoring-new-turn";
-      liveFollowUserScrollGenerationRef.current = anchorUserScrollGenerationRef.current;
-      pendingTimelineAnchorRef.current = messageIdForSend;
-      activeTimelineAnchorIndexRef.current = null;
-      showScrollDebouncer.current.cancel();
-      setShowScrollToBottom(false);
-      setTimelineAnchor({
-        threadKey: scopedThreadKey(scopeThreadRef(activeThread.environmentId, threadIdForSend)),
-        messageId: messageIdForSend,
-      });
+      prepareTimelineForLocalSend(
+        scopeThreadRef(activeThread.environmentId, threadIdForSend),
+        messageIdForSend,
+      );
 
       setOptimisticUserMessages((existing) => [
         ...existing,
@@ -4548,6 +4550,7 @@ function ChatViewContent(props: ChatViewProps) {
       isSendBusy,
       isServerThread,
       persistThreadSettingsForNextTurn,
+      prepareTimelineForLocalSend,
       resetLocalDispatch,
       runtimeMode,
       setComposerDraftInteractionMode,

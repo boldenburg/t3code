@@ -399,6 +399,10 @@ export function useSettingsRestore(onRestored?: () => void) {
       ...(settings.autoOpenPlanSidebar !== DEFAULT_UNIFIED_SETTINGS.autoOpenPlanSidebar
         ? ["Auto-open task panel"]
         : []),
+      ...(settings.autoScrollSentMessageToTop !==
+      DEFAULT_UNIFIED_SETTINGS.autoScrollSentMessageToTop
+        ? ["Scroll sent message to top"]
+        : []),
       ...(settings.enableAssistantStreaming !== DEFAULT_UNIFIED_SETTINGS.enableAssistantStreaming
         ? ["Assistant output"]
         : []),
@@ -427,6 +431,7 @@ export function useSettingsRestore(onRestored?: () => void) {
     [
       isGitWritingModelDirty,
       settings.autoOpenPlanSidebar,
+      settings.autoScrollSentMessageToTop,
       settings.confirmThreadArchive,
       settings.confirmThreadDelete,
       settings.addProjectBaseDirectory,
@@ -459,6 +464,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       diffIgnoreWhitespace: DEFAULT_UNIFIED_SETTINGS.diffIgnoreWhitespace,
       sidebarThreadPreviewCount: DEFAULT_UNIFIED_SETTINGS.sidebarThreadPreviewCount,
       autoOpenPlanSidebar: DEFAULT_UNIFIED_SETTINGS.autoOpenPlanSidebar,
+      autoScrollSentMessageToTop: DEFAULT_UNIFIED_SETTINGS.autoScrollSentMessageToTop,
       enableAssistantStreaming: DEFAULT_UNIFIED_SETTINGS.enableAssistantStreaming,
       automaticGitFetchInterval: DEFAULT_UNIFIED_SETTINGS.automaticGitFetchInterval,
       defaultThreadEnvMode: DEFAULT_UNIFIED_SETTINGS.defaultThreadEnvMode,
@@ -718,6 +724,33 @@ export function GeneralSettingsPanel() {
                 updateSettings({ autoOpenPlanSidebar: Boolean(checked) })
               }
               aria-label="Open the task panel automatically"
+            />
+          }
+        />
+
+        <SettingsRow
+          title="Scroll sent message to top"
+          description="After sending, place your message at the top while the response streams below it."
+          resetAction={
+            settings.autoScrollSentMessageToTop !==
+            DEFAULT_UNIFIED_SETTINGS.autoScrollSentMessageToTop ? (
+              <SettingResetButton
+                label="sent message scrolling"
+                onClick={() =>
+                  updateSettings({
+                    autoScrollSentMessageToTop: DEFAULT_UNIFIED_SETTINGS.autoScrollSentMessageToTop,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Switch
+              checked={settings.autoScrollSentMessageToTop}
+              onCheckedChange={(checked) =>
+                updateSettings({ autoScrollSentMessageToTop: Boolean(checked) })
+              }
+              aria-label="Scroll sent messages to the top"
             />
           }
         />

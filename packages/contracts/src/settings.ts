@@ -85,6 +85,9 @@ export const DEFAULT_CHAT_COMPOSER_FOOTER_SETTINGS: ChatComposerFooterSettings =
 
 export const ClientSettingsSchema = Schema.Struct({
   autoOpenPlanSidebar: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  autoScrollSentMessageToTop: Schema.Boolean.pipe(
+    Schema.withDecodingDefault(Effect.succeed(false)),
+  ),
   chatComposerFooter: ChatComposerFooterSettingsSchema,
   confirmThreadArchive: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   confirmThreadDelete: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
@@ -580,6 +583,7 @@ export type ServerSettingsPatch = typeof ServerSettingsPatch.Type;
 
 export const ClientSettingsPatch = Schema.Struct({
   autoOpenPlanSidebar: Schema.optionalKey(Schema.Boolean),
+  autoScrollSentMessageToTop: Schema.optionalKey(Schema.Boolean),
   chatComposerFooter: Schema.optionalKey(ChatComposerFooterSettingsSchema),
   confirmThreadArchive: Schema.optionalKey(Schema.Boolean),
   confirmThreadDelete: Schema.optionalKey(Schema.Boolean),
