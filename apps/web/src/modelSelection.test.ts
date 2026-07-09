@@ -6,6 +6,7 @@ import {
   getAppModelOptionsForInstance,
   resolveAppModelSelectionForInstance,
   resolveAppModelSelectionState,
+  resolveProviderInstanceDefaultModelSelection,
 } from "./modelSelection";
 
 function provider(input: {
@@ -267,6 +268,54 @@ describe("instance-scoped model selection", () => {
     expect(resolveAppModelSelectionState(settings, providers)).toEqual({
       instanceId: ProviderInstanceId.make("claude_openrouter"),
       model: "openai/gpt-5.5",
+    });
+  });
+
+  it("resolves the persisted provider default model and reasoning", () => {
+    const codex = ProviderInstanceId.make("codex");
+    const providers: ReadonlyArray<ServerProvider> = [
+      {
+        ...provider({ instanceId: "codex" }),
+        models: [
+          {
+            slug: "gpt-5.4",
+            name: "GPT-5.4",
+            isCustom: false,
+            capabilities: {
+              optionDescriptors: [
+                {
+                  id: "reasoningEffort",
+                  label: "Reasoning",
+                  type: "select",
+                  options: [
+                    { id: "medium", label: "Medium", isDefault: true },
+                    { id: "high", label: "High" },
+                  ],
+                  currentValue: "medium",
+                },
+              ],
+            },
+          },
+        ],
+      },
+    ];
+    const settings: UnifiedSettings = {
+      ...DEFAULT_UNIFIED_SETTINGS,
+      providerInstances: {
+        [codex]: {
+          driver: ProviderDriverKind.make("codex"),
+          config: {
+            defaultModel: "gpt-5.4",
+            defaultReasoningEffort: "high",
+          },
+        },
+      },
+    };
+
+    expect(resolveProviderInstanceDefaultModelSelection(settings, providers, codex)).toEqual({
+      instanceId: codex,
+      model: "gpt-5.4",
+      options: [{ id: "reasoningEffort", value: "high" }],
     });
   });
 });

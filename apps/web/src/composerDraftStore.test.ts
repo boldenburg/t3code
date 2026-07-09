@@ -14,7 +14,9 @@ import {
   ThreadId,
   type ModelSelection,
   type ProviderOptionSelection,
+  type ServerProvider,
 } from "@t3tools/contracts";
+import { DEFAULT_UNIFIED_SETTINGS, type UnifiedSettings } from "@t3tools/contracts/settings";
 import { createModelSelection } from "@t3tools/shared/model";
 
 // The composer draft's `modelSelectionByProvider` and
@@ -66,6 +68,7 @@ import {
   markPromotedDraftThreads,
   markPromotedDraftThreadsByRef,
   type ComposerImageAttachment,
+  deriveEffectiveComposerModelState,
   useComposerDraftStore,
   DraftId,
 } from "./composerDraftStore";
@@ -76,6 +79,7 @@ import {
   type TerminalContextDraft,
 } from "./lib/terminalContext";
 import { createDebouncedStorage } from "./lib/storage";
+import { DEFAULT_RUNTIME_MODE } from "./types";
 
 function makeImage(input: {
   id: string;
@@ -170,6 +174,93 @@ function draftFor(threadId: ThreadId, environmentId: EnvironmentId = LEGACY_TEST
 function draftByKey(key: string) {
   return useComposerDraftStore.getState().draftsByThreadKey[key] ?? undefined;
 }
+
+describe("deriveEffectiveComposerModelState provider defaults", () => {
+  const providers: ReadonlyArray<ServerProvider> = [
+    {
+      instanceId: CODEX_INSTANCE,
+      driver: CODEX_DRIVER,
+      enabled: true,
+      installed: true,
+      version: null,
+      status: "ready",
+      auth: { status: "authenticated" },
+      checkedAt: "2026-01-01T00:00:00.000Z",
+      slashCommands: [],
+      skills: [],
+      models: ["gpt-5.4", "gpt-5.3-codex"].map((slug) => ({
+        slug,
+        name: slug,
+        isCustom: false,
+        capabilities: {
+          optionDescriptors: [
+            {
+              id: "reasoningEffort",
+              label: "Reasoning",
+              type: "select",
+              options: [
+                { id: "medium", label: "Medium", isDefault: true },
+                { id: "high", label: "High" },
+              ],
+              currentValue: "medium",
+            },
+          ],
+        },
+      })),
+    },
+  ];
+
+  function settingsWithCodexConfig(config: Record<string, unknown>): UnifiedSettings {
+    return {
+      ...DEFAULT_UNIFIED_SETTINGS,
+      providerInstances: {
+        [CODEX_INSTANCE]: {
+          driver: CODEX_DRIVER,
+          config,
+        },
+      },
+    };
+  }
+
+  it("applies provider reasoning to the project model when no provider model is set", () => {
+    const state = deriveEffectiveComposerModelState({
+      draft: null,
+      providers,
+      selectedProvider: CODEX_DRIVER,
+      selectedInstanceId: CODEX_INSTANCE,
+      threadModelSelection: null,
+      projectModelSelection: createModelSelection(CODEX_INSTANCE, "gpt-5.3-codex"),
+      settings: settingsWithCodexConfig({ defaultReasoningEffort: "high" }),
+    });
+
+    expect(state).toEqual({
+      selectedModel: "gpt-5.3-codex",
+      modelOptions: {
+        [CODEX_INSTANCE]: [{ id: "reasoningEffort", value: "high" }],
+      },
+    });
+  });
+
+  it("prefers the provider default model over the project model", () => {
+    const state = deriveEffectiveComposerModelState({
+      draft: null,
+      providers,
+      selectedProvider: CODEX_DRIVER,
+      selectedInstanceId: CODEX_INSTANCE,
+      threadModelSelection: null,
+      projectModelSelection: createModelSelection(CODEX_INSTANCE, "gpt-5.3-codex"),
+      settings: settingsWithCodexConfig({
+        defaultModel: "gpt-5.4",
+        defaultReasoningEffort: "high",
+      }),
+    });
+
+    expect(state.selectedModel).toBe("gpt-5.4");
+    expect(state.modelOptions).toEqual({
+      [CODEX_INSTANCE]: [{ id: "reasoningEffort", value: "high" }],
+    });
+  });
+});
 
 describe("composerDraftStore addImages", () => {
   const threadId = ThreadId.make("thread-dedupe");
@@ -750,7 +841,7 @@ describe("composerDraftStore project draft thread mapping", () => {
       branch: "feature/test",
       worktreePath: "/tmp/worktree-test",
       envMode: "worktree",
-      runtimeMode: "full-access",
+      runtimeMode: DEFAULT_RUNTIME_MODE,
       interactionMode: "default",
       createdAt: "2026-01-01T00:00:00.000Z",
     });
@@ -761,7 +852,7 @@ describe("composerDraftStore project draft thread mapping", () => {
       branch: "feature/test",
       worktreePath: "/tmp/worktree-test",
       envMode: "worktree",
-      runtimeMode: "full-access",
+      runtimeMode: DEFAULT_RUNTIME_MODE,
       interactionMode: "default",
       createdAt: "2026-01-01T00:00:00.000Z",
     });

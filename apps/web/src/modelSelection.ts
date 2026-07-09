@@ -11,6 +11,7 @@ import {
   createModelSelection,
   normalizeModelSlug,
   resolveSelectableModel,
+  trimOrNull,
 } from "@t3tools/shared/model";
 import { getComposerProviderState } from "./components/chat/composerProviderState";
 import { UnifiedSettings } from "@t3tools/contracts/settings";
@@ -253,6 +254,71 @@ export function resolveAppModelSelectionForInstance(
     entry.models[0]?.slug ??
     null
   );
+}
+
+function readProviderInstanceConfigString(
+  settings: UnifiedSettings,
+  instanceId: ProviderInstanceId,
+  key: string,
+): string | null {
+  const config = settings.providerInstances?.[instanceId]?.config;
+  if (config === null || typeof config !== "object") return null;
+  const value = (config as Record<string, unknown>)[key];
+  return typeof value === "string" ? trimOrNull(value) : null;
+}
+
+function readLegacyProviderConfigString(
+  settings: UnifiedSettings,
+  provider: ProviderDriverKind,
+  key: string,
+): string | null {
+  const config = (settings.providers as Record<string, unknown>)[provider];
+  if (config === null || typeof config !== "object") return null;
+  const value = (config as Record<string, unknown>)[key];
+  return typeof value === "string" ? trimOrNull(value) : null;
+}
+
+export function resolveProviderInstanceDefaultModelSelection(
+  settings: UnifiedSettings,
+  providers: ReadonlyArray<ServerProvider>,
+  instanceId: ProviderInstanceId,
+  fallbackModel?: string | null,
+): ModelSelection | null {
+  const entry = deriveProviderInstanceEntries(providers).find(
+    (candidate) => candidate.instanceId === instanceId,
+  );
+  if (!entry) return null;
+  const readConfig = (key: string) =>
+    readProviderInstanceConfigString(settings, instanceId, key) ??
+    (instanceId === defaultInstanceIdForDriver(entry.driverKind)
+      ? readLegacyProviderConfigString(settings, entry.driverKind, key)
+      : null);
+  const defaultModel = readConfig("defaultModel");
+  const defaultReasoningEffort = readConfig("defaultReasoningEffort");
+  if (!defaultModel && !defaultReasoningEffort) return null;
+  if (!defaultModel && !fallbackModel) return null;
+
+  const model =
+    resolveAppModelSelectionForInstance(
+      instanceId,
+      settings,
+      providers,
+      defaultModel ?? fallbackModel,
+    ) ??
+    entry.models[0]?.slug ??
+    null;
+  if (!model) return null;
+
+  const { modelOptionsForDispatch } = getComposerProviderState({
+    provider: entry.driverKind,
+    model,
+    models: entry.models,
+    modelOptions: defaultReasoningEffort
+      ? [{ id: "reasoningEffort", value: defaultReasoningEffort }]
+      : undefined,
+  });
+
+  return createModelSelection(instanceId, model, modelOptionsForDispatch);
 }
 
 /**

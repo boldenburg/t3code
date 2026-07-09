@@ -12,9 +12,18 @@ import type {
 import { cn } from "../../lib/utils";
 import { DraftInput } from "../ui/draft-input";
 import { Input } from "../ui/input";
+import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Switch } from "../ui/switch";
 import { Textarea } from "../ui/textarea";
 import type { ProviderClientDefinition } from "./providerDriverMeta";
+
+const EMPTY_SELECT_VALUE = "__t3_provider_setting_empty__";
+
+export interface ProviderSettingsFieldOption {
+  readonly value: string;
+  readonly label: string;
+  readonly description?: string | undefined;
+}
 
 export interface ProviderSettingsFieldModel {
   readonly key: string;
@@ -159,6 +168,9 @@ interface ProviderSettingsFormProps {
   readonly value: unknown;
   readonly idPrefix: string;
   readonly variant: "card" | "dialog";
+  readonly fieldOptions?:
+    | Partial<Record<string, ReadonlyArray<ProviderSettingsFieldOption>>>
+    | undefined;
   readonly onChange: (nextConfig: Record<string, unknown> | undefined) => void;
 }
 
@@ -174,6 +186,7 @@ function FieldFrame(props: {
 
 interface ProviderSettingsFieldRowProps {
   readonly field: ProviderSettingsFieldModel;
+  readonly options?: ReadonlyArray<ProviderSettingsFieldOption> | undefined;
   readonly value: unknown;
   readonly idPrefix: string;
   readonly variant: ProviderSettingsFormProps["variant"];
@@ -182,6 +195,7 @@ interface ProviderSettingsFieldRowProps {
 
 function ProviderSettingsFieldRow({
   field,
+  options,
   value,
   idPrefix,
   variant,
@@ -196,6 +210,11 @@ function ProviderSettingsFieldRow({
   const description = field.description ? (
     <span className={descriptionClassName}>{field.description}</span>
   ) : null;
+  const currentStringValue = readProviderConfigString(value, field.key);
+  const selectOptions =
+    options && currentStringValue && !options.some((option) => option.value === currentStringValue)
+      ? [{ value: currentStringValue, label: currentStringValue }, ...options]
+      : options;
 
   if (field.control === "switch") {
     return (
@@ -213,6 +232,56 @@ function ProviderSettingsFieldRow({
             aria-label={field.label}
           />
         </div>
+      </FieldFrame>
+    );
+  }
+
+  if (selectOptions && selectOptions.length > 0) {
+    return (
+      <FieldFrame variant={variant}>
+        <label htmlFor={inputId} className={cn(variant === "card" && "block")}>
+          {label}
+          <Select
+            value={currentStringValue || EMPTY_SELECT_VALUE}
+            onValueChange={(next) =>
+              onChange(
+                nextProviderConfigWithFieldValue(
+                  value,
+                  field,
+                  next === EMPTY_SELECT_VALUE ? "" : (next ?? ""),
+                ),
+              )
+            }
+          >
+            <SelectTrigger
+              id={inputId}
+              className={cn(variant === "card" ? "mt-1.5" : "bg-background")}
+            >
+              <SelectValue placeholder={field.placeholder} />
+            </SelectTrigger>
+            <SelectPopup alignItemWithTrigger={false}>
+              {selectOptions.map((option) => (
+                <SelectItem
+                  key={`${field.key}:${option.value}`}
+                  value={option.value || EMPTY_SELECT_VALUE}
+                  className={option.description ? "py-2" : undefined}
+                >
+                  {option.description ? (
+                    <div className="grid min-w-0 gap-0.5">
+                      <span className="truncate">{option.label}</span>
+                      <span className="truncate text-xs text-muted-foreground">
+                        {option.description}
+                      </span>
+                    </div>
+                  ) : (
+                    <span className="truncate">{option.label}</span>
+                  )}
+                </SelectItem>
+              ))}
+            </SelectPopup>
+          </Select>
+          {description}
+        </label>
       </FieldFrame>
     );
   }
@@ -279,6 +348,7 @@ export function ProviderSettingsForm({
   value,
   idPrefix,
   variant,
+  fieldOptions,
   onChange,
 }: ProviderSettingsFormProps) {
   const fields = useMemo(() => deriveProviderSettingsFields(definition), [definition]);
@@ -293,6 +363,7 @@ export function ProviderSettingsForm({
         <ProviderSettingsFieldRow
           key={field.key}
           field={field}
+          options={fieldOptions?.[field.key]}
           value={value}
           idPrefix={idPrefix}
           variant={variant}

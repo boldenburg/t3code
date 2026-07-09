@@ -753,13 +753,19 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     providerInstanceEntries,
     selectedProvider,
   ]);
+  const composerThreadModelSelection =
+    activeThread !== undefined &&
+    activeThread.session === null &&
+    activeThread.messages.length === 0
+      ? null
+      : activeThreadModelSelection;
 
   const { modelOptions: composerModelOptions, selectedModel } = useEffectiveComposerModelState({
     threadRef: composerDraftTarget,
     providers: providerStatuses,
     selectedProvider,
     selectedInstanceId,
-    threadModelSelection: activeThreadModelSelection,
+    threadModelSelection: composerThreadModelSelection,
     projectModelSelection: activeProjectDefaultModelSelection,
     settings,
   });

@@ -38,7 +38,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from ".
 import { stackedThreadToast, toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import type { DriverOption } from "./providerDriverMeta";
-import { ProviderSettingsForm } from "./ProviderSettingsForm";
+import {
+  ProviderSettingsForm,
+  readProviderConfigString,
+  type ProviderSettingsFieldOption,
+} from "./ProviderSettingsForm";
 import { ProviderModelsSection } from "./ProviderModelsSection";
 import { ProviderInstanceIcon } from "../chat/ProviderInstanceIcon";
 import { ProviderAccentColorPicker } from "./ProviderAccentColorPicker";
@@ -52,6 +56,14 @@ import {
 } from "./providerStatus";
 
 const ENVIRONMENT_VARIABLE_NAME_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
+const CODEX_REASONING_FALLBACK_OPTIONS: ReadonlyArray<ProviderSettingsFieldOption> = [
+  { value: "none", label: "None" },
+  { value: "minimal", label: "Minimal" },
+  { value: "low", label: "Low" },
+  { value: "medium", label: "Medium" },
+  { value: "high", label: "High" },
+  { value: "xhigh", label: "Extra High" },
+];
 
 let environmentVariableDraftId = 0;
 const nextEnvironmentVariableDraftId = () => `provider-env-${environmentVariableDraftId++}`;
@@ -129,6 +141,47 @@ export function deriveProviderModelsForDisplay(input: {
       },
   );
   return [...serverModels, ...customModels];
+}
+
+export function deriveDefaultModelOptions(
+  models: ReadonlyArray<ServerProviderModel>,
+): ReadonlyArray<ProviderSettingsFieldOption> {
+  return [
+    { value: "", label: "Use project default" },
+    ...models.map((model) => ({
+      value: model.slug,
+      label: model.name || model.slug,
+      ...(model.name && model.name !== model.slug ? { description: model.slug } : {}),
+    })),
+  ];
+}
+
+function readReasoningOptions(
+  model: ServerProviderModel | undefined,
+): ReadonlyArray<ProviderSettingsFieldOption> {
+  const descriptor = model?.capabilities?.optionDescriptors?.find(
+    (candidate) => candidate.type === "select" && candidate.id === "reasoningEffort",
+  );
+  return descriptor?.type === "select"
+    ? descriptor.options.map((option) => ({
+        value: option.id,
+        label: option.label,
+        ...(option.description ? { description: option.description } : {}),
+      }))
+    : [];
+}
+
+export function deriveDefaultReasoningOptions(input: {
+  readonly models: ReadonlyArray<ServerProviderModel>;
+  readonly selectedModel: string;
+}): ReadonlyArray<ProviderSettingsFieldOption> {
+  const modelOptions = input.selectedModel
+    ? readReasoningOptions(input.models.find((model) => model.slug === input.selectedModel))
+    : (input.models.map(readReasoningOptions).find((options) => options.length > 0) ?? []);
+  return [
+    { value: "", label: "Use model default" },
+    ...(modelOptions.length > 0 ? modelOptions : CODEX_REASONING_FALLBACK_OPTIONS),
+  ];
 }
 
 function ProviderAuthEmail(props: {
@@ -451,6 +504,16 @@ export function ProviderInstanceCard({
     liveModels: liveProvider?.models,
     customModels,
   });
+  const providerSettingsFieldOptions =
+    driverKind === "codex"
+      ? {
+          defaultModel: deriveDefaultModelOptions(modelsForDisplay),
+          defaultReasoningEffort: deriveDefaultReasoningOptions({
+            models: modelsForDisplay,
+            selectedModel: readProviderConfigString(instance.config, "defaultModel"),
+          }),
+        }
+      : undefined;
 
   const updateDisplayName = (value: string) => {
     const trimmed = value.trim();
@@ -770,6 +833,7 @@ export function ProviderInstanceCard({
                 value={instance.config}
                 idPrefix={`provider-instance-${instanceId}`}
                 variant="card"
+                fieldOptions={providerSettingsFieldOptions}
                 onChange={updateConfig}
               />
             ) : null}

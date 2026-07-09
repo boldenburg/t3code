@@ -32,7 +32,11 @@ import { DeepMutable } from "effect/Types";
 import { createModelSelection, normalizeModelSlug } from "@t3tools/shared/model";
 import { useMemo } from "react";
 import { getLocalStorageItem } from "./hooks/useLocalStorage";
-import { resolveAppModelSelection, resolveAppModelSelectionForInstance } from "./modelSelection";
+import {
+  resolveAppModelSelection,
+  resolveAppModelSelectionForInstance,
+  resolveProviderInstanceDefaultModelSelection,
+} from "./modelSelection";
 import { DEFAULT_INTERACTION_MODE, DEFAULT_RUNTIME_MODE, type ChatImageAttachment } from "./types";
 import {
   type TerminalContextDraft,
@@ -960,8 +964,18 @@ export function deriveEffectiveComposerModelState(input: {
   projectModelSelection: ModelSelection | null | undefined;
   settings: UnifiedSettings;
 }): EffectiveComposerModelState {
+  const providerDefaultSelection = input.selectedInstanceId
+    ? resolveProviderInstanceDefaultModelSelection(
+        input.settings,
+        input.providers,
+        input.selectedInstanceId,
+      )
+    : null;
   const baseModelCandidate =
-    input.threadModelSelection?.model ?? input.projectModelSelection?.model ?? null;
+    input.threadModelSelection?.model ??
+    providerDefaultSelection?.model ??
+    input.projectModelSelection?.model ??
+    null;
   const baseModel =
     (input.selectedInstanceId
       ? resolveAppModelSelectionForInstance(
@@ -979,6 +993,14 @@ export function deriveEffectiveComposerModelState(input: {
     ) ??
     normalizeModelSlug(baseModelCandidate, input.selectedProvider) ??
     getDefaultServerModel(input.providers, input.selectedProvider);
+  const providerDefaultOptionSelection = input.selectedInstanceId
+    ? resolveProviderInstanceDefaultModelSelection(
+        input.settings,
+        input.providers,
+        input.selectedInstanceId,
+        baseModel,
+      )
+    : null;
   // Look up the instance's saved selection first; fall back to the
   // driver-kind bucket so legacy kind-keyed drafts still resolve. Every
   // `ProviderDriverKind` literal is a valid `ProviderInstanceId` slug, so the
@@ -1009,6 +1031,7 @@ export function deriveEffectiveComposerModelState(input: {
   const modelOptions =
     modelSelectionByProviderToOptions(input.draft?.modelSelectionByProvider) ??
     providerSelectionsFromModelSelection(input.threadModelSelection) ??
+    providerSelectionsFromModelSelection(providerDefaultOptionSelection) ??
     providerSelectionsFromModelSelection(input.projectModelSelection) ??
     null;
 

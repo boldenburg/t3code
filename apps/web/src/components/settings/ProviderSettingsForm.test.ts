@@ -18,6 +18,8 @@ describe("ProviderSettingsForm helpers", () => {
       "binaryPath",
       "homePath",
       "shadowHomePath",
+      "defaultModel",
+      "defaultReasoningEffort",
     ]);
   });
 

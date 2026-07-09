@@ -239,13 +239,35 @@ export const CodexSettings = makeProviderSettingsSchema(
         },
       }),
     ),
+    defaultModel: TrimmedString.pipe(
+      Schema.withDecodingDefault(Effect.succeed("")),
+      Schema.annotateKey({
+        title: "Default chat model",
+        description: "Model to use for new chats on this Codex instance.",
+        providerSettingsForm: {
+          placeholder: "gpt-5.4",
+          clearWhenEmpty: "omit",
+        },
+      }),
+    ),
+    defaultReasoningEffort: TrimmedString.pipe(
+      Schema.withDecodingDefault(Effect.succeed("")),
+      Schema.annotateKey({
+        title: "Default reasoning",
+        description: "Reasoning level for new chats, for example low, medium, high, or xhigh.",
+        providerSettingsForm: {
+          placeholder: "high",
+          clearWhenEmpty: "omit",
+        },
+      }),
+    ),
     customModels: Schema.Array(Schema.String).pipe(
       Schema.withDecodingDefault(Effect.succeed([])),
       Schema.annotateKey({ providerSettingsForm: { hidden: true } }),
     ),
   },
   {
-    order: ["binaryPath", "homePath", "shadowHomePath"],
+    order: ["binaryPath", "homePath", "shadowHomePath", "defaultModel", "defaultReasoningEffort"],
   },
 );
 export type CodexSettings = typeof CodexSettings.Type;
@@ -517,6 +539,8 @@ const CodexSettingsPatch = Schema.Struct({
   binaryPath: Schema.optionalKey(TrimmedString),
   homePath: Schema.optionalKey(TrimmedString),
   shadowHomePath: Schema.optionalKey(TrimmedString),
+  defaultModel: Schema.optionalKey(TrimmedString),
+  defaultReasoningEffort: Schema.optionalKey(TrimmedString),
   customModels: Schema.optionalKey(Schema.Array(Schema.String)),
 });
 
