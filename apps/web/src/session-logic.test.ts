@@ -64,6 +64,7 @@ describe("derivePendingApprovals", () => {
           requestId: "req-1",
           requestKind: "command",
           detail: "bun run lint",
+          reason: "Check the code for lint errors.",
         },
       }),
       makeActivity({
@@ -90,6 +91,7 @@ describe("derivePendingApprovals", () => {
         requestKind: "command",
         createdAt: "2026-02-23T00:00:01.000Z",
         detail: "bun run lint",
+        reason: "Check the code for lint errors.",
       },
     ]);
   });

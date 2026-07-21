@@ -448,7 +448,6 @@ export interface ChatComposerProps {
 
   // Pending approvals / inputs
   activePendingApproval: PendingApproval | null;
-  pendingApprovals: PendingApproval[];
   pendingUserInputs: PendingUserInput[];
   activePendingProgress: {
     questionIndex: number;
@@ -552,7 +551,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     isPreparingWorktree,
     environmentUnavailable,
     activePendingApproval,
-    pendingApprovals,
     pendingUserInputs,
     activePendingProgress,
     activePendingResolvedAnswers,
@@ -2159,7 +2157,11 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           data-chat-composer-mobile-collapsed={isComposerCollapsedMobile ? "true" : "false"}
           className={cn(
             "chat-composer-glass rounded-[20px] border transition-colors duration-200 has-focus-visible:border-ring/45",
-            isDragOverComposer ? "border-primary/70 bg-accent/45" : "border-border",
+            activePendingApproval
+              ? "border-amber-600 has-focus-visible:border-amber-600 dark:border-amber-300/90 dark:has-focus-visible:border-amber-300/90"
+              : isDragOverComposer
+                ? "border-primary/70 bg-accent/45"
+                : "border-border",
             environmentUnavailable ? "opacity-75" : null,
             composerProviderState.composerSurfaceClassName,
           )}
@@ -2185,10 +2187,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           {!isComposerCollapsedMobile &&
             (activePendingApproval ? (
               <div className="rounded-t-[19px] border-b border-border/65 bg-muted/20">
-                <ComposerPendingApprovalPanel
-                  approval={activePendingApproval}
-                  pendingCount={pendingApprovals.length}
-                />
+                <ComposerPendingApprovalPanel approval={activePendingApproval} />
               </div>
             ) : pendingUserInputs.length > 0 ? (
               <div className="rounded-t-[19px] border-b border-border/65 bg-muted/20">
@@ -2215,10 +2214,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
               className="rounded-t-[19px] border-b border-border/65 bg-muted/20"
               data-chat-composer-collapsed-controls="true"
             >
-              <ComposerPendingApprovalPanel
-                approval={activePendingApproval}
-                pendingCount={pendingApprovals.length}
-              />
+              <ComposerPendingApprovalPanel approval={activePendingApproval} />
               <div className="flex flex-wrap items-center justify-end gap-2 px-3 pb-3 sm:px-4">
                 <ComposerPendingApprovalActions
                   requestId={activePendingApproval.requestId}

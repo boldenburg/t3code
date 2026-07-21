@@ -527,45 +527,51 @@ function mapToRuntimeEvents(
       ];
     }
 
-    const detail = (() => {
+    const { detail, reason } = (() => {
       switch (event.method) {
         case "item/commandExecution/requestApproval": {
           const payload = readPayload(
             EffectCodexSchema.ServerRequest__CommandExecutionRequestApprovalParams,
             event.payload,
           );
-          return payload?.command ?? payload?.reason ?? undefined;
+          return {
+            detail: payload?.command ?? undefined,
+            reason: payload?.reason ?? undefined,
+          };
         }
         case "item/fileChange/requestApproval": {
           const payload = readPayload(
             EffectCodexSchema.ServerRequest__FileChangeRequestApprovalParams,
             event.payload,
           );
-          return payload?.reason ?? undefined;
+          return { reason: payload?.reason ?? undefined };
         }
         case "applyPatchApproval": {
           const payload = readPayload(
             EffectCodexSchema.ServerRequest__ApplyPatchApprovalParams,
             event.payload,
           );
-          return payload?.reason ?? undefined;
+          return { reason: payload?.reason ?? undefined };
         }
         case "execCommandApproval": {
           const payload = readPayload(
             EffectCodexSchema.ServerRequest__ExecCommandApprovalParams,
             event.payload,
           );
-          return payload?.reason ?? payload?.command.join(" ");
+          return {
+            detail: payload?.command.join(" "),
+            reason: payload?.reason ?? undefined,
+          };
         }
         case "item/tool/call": {
           const payload = readPayload(
             EffectCodexSchema.ServerRequest__DynamicToolCallParams,
             event.payload,
           );
-          return payload?.tool ?? undefined;
+          return { detail: payload?.tool ?? undefined };
         }
         default:
-          return undefined;
+          return {};
       }
     })();
 
@@ -576,6 +582,7 @@ function mapToRuntimeEvents(
         payload: {
           requestType: toRequestTypeFromMethod(event.method),
           ...(detail ? { detail } : {}),
+          ...(reason ? { reason } : {}),
           ...(event.payload !== undefined ? { args: event.payload } : {}),
         },
       },

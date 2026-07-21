@@ -5138,7 +5138,6 @@ function ChatViewContent(props: ChatViewProps) {
                       isPreparingWorktree={isPreparingWorktree}
                       environmentUnavailable={activeEnvironmentUnavailableState}
                       activePendingApproval={activePendingApproval}
-                      pendingApprovals={pendingApprovals}
                       pendingUserInputs={pendingUserInputs}
                       activePendingProgress={activePendingProgress}
                       activePendingResolvedAnswers={activePendingResolvedAnswers}
