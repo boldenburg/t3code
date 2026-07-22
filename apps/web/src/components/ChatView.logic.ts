@@ -27,6 +27,15 @@ export const MAX_HIDDEN_MOUNTED_PREVIEW_THREADS = 3;
 
 export const LastInvokedScriptByProjectSchema = Schema.Record(ProjectId, Schema.String);
 
+export function resolveMonitorCenterOffset(input: {
+  screenLeft: number;
+  screenWidth: number;
+  viewportLeft: number;
+  viewportWidth: number;
+}): number {
+  return input.screenLeft + input.screenWidth / 2 - input.viewportLeft - input.viewportWidth / 2;
+}
+
 export function buildLocalDraftThread(
   threadId: ThreadId,
   draftThread: DraftThreadState,

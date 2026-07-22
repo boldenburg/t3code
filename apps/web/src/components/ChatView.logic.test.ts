@@ -13,6 +13,7 @@ import {
   hasServerAcknowledgedLocalDispatch,
   reconcileMountedTerminalThreadIds,
   reconcileRetainedMountedThreadIds,
+  resolveMonitorCenterOffset,
   resolveSendEnvMode,
   shouldWriteThreadErrorToCurrentServerThread,
 } from "./ChatView.logic";
@@ -69,6 +70,19 @@ const readySession = {
   lastError: null,
   updatedAt: "2026-03-29T00:00:10.000Z",
 };
+
+describe("resolveMonitorCenterOffset", () => {
+  it("accounts for Firefox chrome to center on the monitor", () => {
+    expect(
+      resolveMonitorCenterOffset({
+        screenLeft: 0,
+        screenWidth: 2048,
+        viewportLeft: 144,
+        viewportWidth: 1904,
+      }),
+    ).toBe(-72);
+  });
+});
 
 describe("buildThreadTurnInterruptInput", () => {
   it("targets the session's active running turn", () => {

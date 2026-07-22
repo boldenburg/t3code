@@ -151,6 +151,25 @@
     padding-inline-end: calc(env(safe-area-inset-right) + 0.75rem);
   }
 
+  .chat-viewport-center {
+    position: relative;
+    left: var(--chat-monitor-center-offset, 0px);
+    width: 100vw;
+    transition: left 200ms linear;
+  }
+
+  @media (min-width: 48rem) {
+    [data-sidebar-state="expanded"] .chat-viewport-center {
+      left: calc(var(--chat-monitor-center-offset, 0px) - var(--sidebar-width));
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .chat-viewport-center {
+      transition: none;
+    }
+  }
+
   .chat-composer-glass,
   .chat-composer-lower-chrome {
     background: color-mix(in srgb, var(--card) 20%, transparent);

@@ -52,6 +52,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
 } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useShallow } from "zustand/react/shallow";
@@ -231,6 +232,7 @@ import {
   deriveLockedProvider,
   readFileAsDataUrl,
   reconcileMountedTerminalThreadIds,
+  resolveMonitorCenterOffset,
   resolveSendEnvMode,
   revokeBlobPreviewUrl,
   revokeUserMessagePreviewUrls,
@@ -257,6 +259,40 @@ const EMPTY_ACTIVITIES: OrchestrationThreadActivity[] = [];
 const EMPTY_PROVIDERS: ServerProvider[] = [];
 const EMPTY_PROVIDER_SKILLS: ServerProvider["skills"] = [];
 const EMPTY_PENDING_USER_INPUT_ANSWERS: Record<string, PendingUserInputDraftAnswer> = {};
+
+type FirefoxWindow = Window & { readonly mozInnerScreenX?: number };
+type FirefoxScreen = Screen & { readonly left?: number };
+
+function readMonitorCenterOffset(): number {
+  if (typeof window === "undefined") return 0;
+
+  const firefoxWindow = window as FirefoxWindow;
+  const firefoxScreen = window.screen as FirefoxScreen;
+  if (typeof firefoxWindow.mozInnerScreenX !== "number" || typeof firefoxScreen.left !== "number") {
+    return 0;
+  }
+
+  return resolveMonitorCenterOffset({
+    screenLeft: firefoxScreen.left,
+    screenWidth: firefoxScreen.width,
+    viewportLeft: firefoxWindow.mozInnerScreenX,
+    viewportWidth: firefoxWindow.innerWidth,
+  });
+}
+
+function useMonitorCenterOffset(): number {
+  const [offset, setOffset] = useState(readMonitorCenterOffset);
+
+  useEffect(() => {
+    const update = () => setOffset(readMonitorCenterOffset());
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
+
+  return offset;
+}
+
 const PreviewPanel = lazy(() =>
   import("./preview/PreviewPanel").then((module) => ({ default: module.PreviewPanel })),
 );
@@ -981,6 +1017,7 @@ const PersistentThreadTerminalPanel = memo(function PersistentThreadTerminalPane
 });
 
 function ChatViewContent(props: ChatViewProps) {
+  const monitorCenterOffset = useMonitorCenterOffset();
   const {
     environmentId,
     threadId,
@@ -4987,7 +5024,14 @@ function ChatViewContent(props: ChatViewProps) {
   ) : null;
 
   return (
-    <div className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden bg-background">
+    <div
+      className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden bg-background"
+      style={
+        {
+          "--chat-monitor-center-offset": `${monitorCenterOffset}px`,
+        } as CSSProperties
+      }
+    >
       {rightPanelOpen && !shouldUsePlanSidebarSheet ? panelLayoutControls : null}
       <div
         className={cn(
@@ -5085,19 +5129,23 @@ function ChatViewContent(props: ChatViewProps) {
               {/* scroll to end pill — shown when user has scrolled away from the live edge */}
               {showScrollToBottom && (
                 <div
-                  className="pointer-events-none absolute left-1/2 z-30 flex -translate-x-1/2 justify-center py-1.5"
+                  className="pointer-events-none absolute inset-x-0 z-30 py-1.5"
                   style={{ bottom: composerOverlayHeight + 4 }}
                 >
-                  <button
-                    type="button"
-                    aria-label="Scroll to end"
-                    title="Scroll to end"
-                    onClick={() => scrollToEnd(true)}
-                    className="pointer-events-auto flex items-center gap-1.5 rounded-full border border-border/60 bg-card px-3 py-1 text-muted-foreground text-xs shadow-sm transition-colors hover:border-border hover:text-foreground hover:cursor-pointer"
-                  >
-                    <ChevronDownIcon className="size-3.5" />
-                    Scroll to end
-                  </button>
+                  <div className="chat-viewport-center px-3 sm:px-5">
+                    <div className="mx-auto flex w-full max-w-3xl justify-center">
+                      <button
+                        type="button"
+                        aria-label="Scroll to end"
+                        title="Scroll to end"
+                        onClick={() => scrollToEnd(true)}
+                        className="pointer-events-auto flex items-center gap-1.5 rounded-full border border-border/60 bg-card px-3 py-1 text-muted-foreground text-xs shadow-sm transition-colors hover:border-border hover:text-foreground hover:cursor-pointer"
+                      >
+                        <ChevronDownIcon className="size-3.5" />
+                        Scroll to end
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
@@ -5110,13 +5158,13 @@ function ChatViewContent(props: ChatViewProps) {
             >
               <div
                 aria-hidden="true"
-                className="chat-composer-horizontal-inset pointer-events-none absolute inset-x-0 top-1.5 bottom-0 z-0 sm:top-2"
+                className="chat-composer-horizontal-inset chat-viewport-center pointer-events-none absolute top-1.5 bottom-0 z-0 sm:top-2"
               >
                 <div className="relative mx-auto h-full w-full max-w-3xl overflow-clip rounded-t-[20px]">
                   <div className="chat-composer-shared-blur absolute -inset-8" />
                 </div>
               </div>
-              <div className="chat-composer-horizontal-inset">
+              <div className="chat-composer-horizontal-inset chat-viewport-center">
                 <div className="pointer-events-auto relative z-10 isolate">
                   <ComposerBannerStack className="relative z-0" items={composerBannerItems} />
                   <div className="relative z-10">
@@ -5195,14 +5243,14 @@ function ChatViewContent(props: ChatViewProps) {
               </div>
               <div
                 className={cn(
-                  "chat-composer-horizontal-inset chat-composer-lower-chrome relative z-10",
+                  "chat-composer-lower-chrome relative z-10",
                   isGitRepo
                     ? "pb-[calc(env(safe-area-inset-bottom)+0.25rem)]"
                     : "pb-[calc(env(safe-area-inset-bottom)+0.75rem)] sm:pb-[calc(env(safe-area-inset-bottom)+1rem)]",
                 )}
               >
                 {isGitRepo && (
-                  <div className="pointer-events-auto">
+                  <div className="chat-composer-horizontal-inset chat-viewport-center pointer-events-auto">
                     <BranchToolbar
                       environmentId={activeThread.environmentId}
                       threadId={activeThread.id}
