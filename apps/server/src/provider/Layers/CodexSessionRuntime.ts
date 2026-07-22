@@ -16,7 +16,8 @@ import {
   ThreadId,
   TurnId,
 } from "@t3tools/contracts";
-import { resolveSpawnCommand } from "@t3tools/shared/shell";
+import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
+import { resolveSpawnCommand, SpawnExecutableResolution } from "@t3tools/shared/shell";
 import { normalizeModelSlug } from "@t3tools/shared/model";
 import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
@@ -36,6 +37,7 @@ import * as CodexRpc from "effect-codex-app-server/rpc";
 import * as EffectCodexSchema from "effect-codex-app-server/schema";
 
 import { buildCodexInitializeParams } from "./CodexProvider.ts";
+import { detectCodexProcessIsolation, isolateCodexProcess } from "./CodexProcessIsolation.ts";
 import { expandHomePath } from "../../pathExpansion.ts";
 import {
   CODEX_DEFAULT_MODE_DEVELOPER_INSTRUCTIONS,
@@ -703,6 +705,8 @@ export const makeCodexSessionRuntime = (
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const runtimeScope = yield* Scope.Scope;
     const crypto = yield* Crypto.Crypto;
+    const hostPlatform = yield* HostProcessPlatform;
+    const resolveExecutable = yield* SpawnExecutableResolution;
     const events = yield* Queue.unbounded<ProviderEvent>();
     const pendingApprovalsRef = yield* Ref.make(new Map<ApprovalRequestId, PendingApproval>());
     const approvalCorrelationsRef = yield* Ref.make(new Map<string, ApprovalCorrelation>());
@@ -719,11 +723,35 @@ export const makeCodexSessionRuntime = (
       ...(resolvedHomePath ? { CODEX_HOME: resolvedHomePath } : {}),
     };
     const extendEnv = options.environment === undefined;
-    const spawnCommand = yield* resolveSpawnCommand(
+    const resolvedSpawnCommand = yield* resolveSpawnCommand(
       options.binaryPath,
       ["app-server", ...(options.appServerArgs ?? [])],
       { env, extendEnv },
     );
+    const spawnEnvironment = extendEnv ? { ...process.env, ...env } : env;
+    const processIsolation = detectCodexProcessIsolation({
+      platform: hostPlatform,
+      environment: spawnEnvironment,
+      systemdRunPath:
+        hostPlatform === "linux"
+          ? resolveExecutable("systemd-run", hostPlatform, spawnEnvironment)
+          : undefined,
+    });
+    const spawnCommand = processIsolation.enabled
+      ? isolateCodexProcess(resolvedSpawnCommand, processIsolation)
+      : resolvedSpawnCommand;
+    if (processIsolation.enabled) {
+      yield* Effect.logInfo("codex app-server process isolation enabled", {
+        memoryHighBytes: processIsolation.limits.memoryHighBytes,
+        memoryMaxBytes: processIsolation.limits.memoryMaxBytes,
+        memorySwapMaxBytes: processIsolation.limits.memorySwapMaxBytes,
+        tasksMax: processIsolation.limits.tasksMax,
+      });
+    } else if (hostPlatform === "linux") {
+      yield* Effect.logWarning("codex app-server process isolation unavailable", {
+        reason: processIsolation.reason,
+      });
+    }
     const child = yield* spawner
       .spawn(
         ChildProcess.make(spawnCommand.command, spawnCommand.args, {

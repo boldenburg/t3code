@@ -18,7 +18,57 @@ import {
   isRecoverableThreadResumeError,
   openCodexThread,
 } from "./CodexSessionRuntime.ts";
+import {
+  computeCodexProcessIsolationLimits,
+  isolateCodexProcess,
+} from "./CodexProcessIsolation.ts";
 const isCodexAppServerRequestError = Schema.is(CodexErrors.CodexAppServerRequestError);
+
+describe("CodexProcessIsolation", () => {
+  it("wraps Codex in a quiet, bounded systemd user scope", () => {
+    const limits = computeCodexProcessIsolationLimits(32 * 1024 ** 3);
+    const command = isolateCodexProcess(
+      {
+        command: "/usr/bin/codex",
+        args: ["app-server", "-c", "model=gpt-5"],
+        shell: false,
+      },
+      {
+        enabled: true,
+        systemdRunPath: "/usr/bin/systemd-run",
+        limits,
+      },
+    );
+
+    NodeAssert.deepStrictEqual(limits, {
+      memoryHighBytes: 6 * 1024 ** 3,
+      memoryMaxBytes: 8 * 1024 ** 3,
+      memorySwapMaxBytes: 2 * 1024 ** 3,
+      tasksMax: 512,
+    });
+    NodeAssert.deepStrictEqual(command, {
+      command: "/usr/bin/systemd-run",
+      args: [
+        "--user",
+        "--scope",
+        "--quiet",
+        "--collect",
+        `--property=MemoryHigh=${6 * 1024 ** 3}`,
+        `--property=MemoryMax=${8 * 1024 ** 3}`,
+        `--property=MemorySwapMax=${2 * 1024 ** 3}`,
+        "--property=TasksMax=512",
+        "--property=OOMPolicy=kill",
+        "--property=KillMode=control-group",
+        "--",
+        "/usr/bin/codex",
+        "app-server",
+        "-c",
+        "model=gpt-5",
+      ],
+      shell: false,
+    });
+  });
+});
 
 describe("CodexSessionRuntimeIdentifierGenerationError", () => {
   it("retains identifier purpose and the random source failure", () => {
